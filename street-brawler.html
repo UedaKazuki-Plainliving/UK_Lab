@@ -13,7 +13,7 @@
 <body>
 <canvas id="game" width="800" height="450"></canvas>
 <div id="controls">
-  A/D 移動 &nbsp; W ジャンプ &nbsp; S しゃがみ &nbsp; J パンチ &nbsp; K キック &nbsp; L ガード
+  A/D 移動 &nbsp; W ジャンプ &nbsp; S しゃがみ &nbsp; J パンチ &nbsp; K キック &nbsp; L ガード &nbsp; <span style="color:#ffaa00">Space 必殺技</span>
 </div>
 <script>
 'use strict';
@@ -38,50 +38,33 @@ function beep(freq, type, dur, vol = 0.25) {
 const keys = {};
 document.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
 document.addEventListener('keyup',   e => { keys[e.code] = false; });
-function keyOnce(code) {
-  if (keys[code]) { keys[code] = false; return true; }
-  return false;
-}
+function keyOnce(code) { if (keys[code]) { keys[code] = false; return true; } return false; }
 
 // ---- Character definitions ----
 const CHARS = {
   icchi: {
-    id: 'icchi',
-    name: 'いっちー',
+    id: 'icchi', name: 'いっちー',
     c1: '#00ccee', c2: '#ffffff',
-    walkSpd: 6.5,
-    jumpVel: -21,
-    gravity: 0.70,
+    walkSpd: 6.5, jumpVel: -21, gravity: 0.70,
     punchDmg: 5,  kickDmg: 8,  jatkDmg: 10,
     punchDur: 15, kickDur: 18, jatkDur: 15,
-    punchS: 3, punchE: 10,
-    kickS:  5, kickE:  12,
-    jatkS:  3, jatkE:  12,
-    hitStunGiven: 16,
-    pushback: 12,
-    scale: 0.88,
-    limbW: 8,
-    bodyW: 28,
+    punchS: 3, punchE: 10, kickS: 5, kickE: 12, jatkS: 3, jatkE: 12,
+    hitStunGiven: 16, pushback: 12,
+    scale: 0.88, limbW: 8, bodyW: 28,
+    specialName: 'ドラゴンソード',
     desc: 'スピードタイプ',
     flavor: ['動きが速い！', '攻撃連打が得意', 'パワーは低め'],
   },
   yuuri: {
-    id: 'yuuri',
-    name: 'ゆうり',
+    id: 'yuuri', name: 'ゆうり',
     c1: '#dd3300', c2: '#882200',
-    walkSpd: 2.5,
-    jumpVel: -14,
-    gravity: 0.92,
+    walkSpd: 2.5, jumpVel: -14, gravity: 0.92,
     punchDmg: 16, kickDmg: 24, jatkDmg: 27,
     punchDur: 30, kickDur: 35, jatkDur: 28,
-    punchS: 8, punchE: 20,
-    kickS: 10, kickE: 24,
-    jatkS:  6, jatkE: 20,
-    hitStunGiven: 30,
-    pushback: 28,
-    scale: 1.18,
-    limbW: 13,
-    bodyW: 40,
+    punchS: 8, punchE: 20, kickS: 10, kickE: 24, jatkS: 6, jatkE: 20,
+    hitStunGiven: 30, pushback: 28,
+    scale: 1.18, limbW: 13, bodyW: 40,
+    specialName: 'ドロップキック',
     desc: 'パワータイプ',
     flavor: ['一撃が重い！', 'ガードが固い', 'スピードは遅め'],
   },
@@ -114,8 +97,7 @@ function drawBackground() {
   ctx.fillStyle = '#100828';
   ctx.beginPath(); ctx.arc(693, 52, 25, 0, Math.PI * 2); ctx.fill();
   buildings.forEach(b => {
-    ctx.fillStyle = '#0a0418';
-    ctx.fillRect(b.x, GROUND - b.h, b.w, b.h);
+    ctx.fillStyle = '#0a0418'; ctx.fillRect(b.x, GROUND - b.h, b.w, b.h);
     ctx.fillStyle = 'rgba(255,220,100,0.65)';
     b.wins.forEach(([wx, wy]) => ctx.fillRect(wx, wy, 9, 11));
   });
@@ -130,18 +112,23 @@ function drawBackground() {
 
 // ---- Hit effects ----
 const effects = [];
-function spawnHit(x, y) {
-  effects.push({ x, y, t: 18 });
-  beep(420 + Math.random() * 180, 'square', 0.12, 0.5);
+let screenFlash = { t: 0, color: '#fff' };
+
+function spawnHit(x, y, big = false) {
+  effects.push({ x, y, t: big ? 25 : 18, big });
+  beep(big ? 280 : 420 + Math.random() * 180, 'square', big ? 0.2 : 0.12, big ? 0.7 : 0.5);
 }
 function drawEffects() {
   for (let i = effects.length - 1; i >= 0; i--) {
     const e = effects[i];
-    const a = e.t / 18, sz = 22 * (2 - a);
+    const maxT = e.big ? 25 : 18;
+    const a = e.t / maxT;
+    const sz = (e.big ? 40 : 22) * (2 - a);
     ctx.globalAlpha = a;
-    ctx.strokeStyle = '#ffe040'; ctx.lineWidth = 3;
-    for (let k = 0; k < 8; k++) {
-      const ang = k / 8 * Math.PI * 2;
+    ctx.strokeStyle = e.big ? '#ff8800' : '#ffe040';
+    ctx.lineWidth = e.big ? 5 : 3;
+    for (let k = 0; k < (e.big ? 12 : 8); k++) {
+      const ang = k / (e.big ? 12 : 8) * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(e.x, e.y);
       ctx.lineTo(e.x + Math.cos(ang) * sz, e.y + Math.sin(ang) * sz);
@@ -150,6 +137,115 @@ function drawEffects() {
     ctx.globalAlpha = 1;
     if (--e.t <= 0) effects.splice(i, 1);
   }
+}
+
+// ---- Dragon Sword Projectile ----
+const projectiles = [];
+
+function spawnDragonSword(owner) {
+  projectiles.push({
+    x: owner.x + owner.dir * 48 * owner.def.scale,
+    y: owner.y - 82 * owner.def.scale,
+    vx: owner.dir * 11,
+    owner,
+    t: 100,
+  });
+  beep(880, 'sine', 0.12, 0.3);
+  setTimeout(() => beep(1100, 'triangle', 0.1, 0.25), 60);
+}
+
+function updateProjectiles(p1, p2) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const proj = projectiles[i];
+    proj.x += proj.vx;
+    if (--proj.t <= 0 || proj.x < -90 || proj.x > W + 90) {
+      projectiles.splice(i, 1); continue;
+    }
+    const target = proj.owner === p1 ? p2 : p1;
+    if (target.hp <= 0 || target.hitStun > 0) continue;
+    const hurt = target.hurtbox();
+    const px = proj.vx > 0 ? proj.x - 5 : proj.x - 65;
+    if (px < hurt.x + hurt.w && px + 70 > hurt.x &&
+        proj.y - 22 < hurt.y + hurt.h && proj.y + 22 > hurt.y) {
+      if (target.takeHit({ dmg: 28, stun: 25, push: 38 }, proj.vx > 0 ? 1 : -1)) {
+        proj.owner.specialGauge = Math.min(proj.owner.maxSpecialGauge, proj.owner.specialGauge + 20);
+        spawnHit(target.x, target.y - 70);
+        projectiles.splice(i, 1);
+      }
+    }
+  }
+}
+
+function drawDragonSword(x, y, dir) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (dir === -1) ctx.scale(-1, 1);
+  ctx.shadowBlur = 20; ctx.shadowColor = '#00eeff';
+
+  // Body
+  ctx.fillStyle = '#0099cc';
+  ctx.beginPath();
+  ctx.moveTo(58, 0);
+  ctx.lineTo(44, -11); ctx.lineTo(26, -9); ctx.lineTo(-36, -10);
+  ctx.lineTo(-52, 0);
+  ctx.lineTo(-36, 10); ctx.lineTo(26, 9); ctx.lineTo(44, 11);
+  ctx.closePath(); ctx.fill();
+
+  // Belly highlight
+  ctx.fillStyle = '#55ddff';
+  ctx.beginPath();
+  ctx.moveTo(50, 0); ctx.lineTo(26, -5); ctx.lineTo(-30, -6);
+  ctx.lineTo(-30, 6); ctx.lineTo(26, 5);
+  ctx.closePath(); ctx.fill();
+
+  // Wing upper
+  ctx.fillStyle = 'rgba(0,160,255,0.8)';
+  ctx.beginPath();
+  ctx.moveTo(8, -9); ctx.lineTo(-2, -34); ctx.lineTo(-15, -24); ctx.lineTo(-22, -9);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-2, -34); ctx.lineTo(-8, -48); ctx.lineTo(-18, -30);
+  ctx.closePath(); ctx.fill();
+
+  // Scale lines
+  ctx.strokeStyle = 'rgba(0,60,100,0.45)'; ctx.lineWidth = 1.2;
+  for (let i = -28; i < 20; i += 14) {
+    ctx.beginPath(); ctx.moveTo(i, -8); ctx.lineTo(i + 9, 8); ctx.stroke();
+  }
+
+  // Eye
+  ctx.fillStyle = '#ffee00';
+  ctx.beginPath(); ctx.arc(47, -5, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(48, -5, 2, 0, Math.PI * 2); ctx.fill();
+
+  // Flame from mouth
+  const ft = Date.now() / 60;
+  ctx.fillStyle = '#ff6600';
+  ctx.beginPath();
+  ctx.moveTo(58, 0); ctx.lineTo(72 + Math.sin(ft)*4, -4);
+  ctx.lineTo(65, 2); ctx.lineTo(75 + Math.sin(ft+1)*3, 5);
+  ctx.lineTo(60, 7); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffdd00';
+  ctx.beginPath();
+  ctx.moveTo(58, 1); ctx.lineTo(67 + Math.sin(ft)*3, 0);
+  ctx.lineTo(62, 5); ctx.closePath(); ctx.fill();
+
+  // Energy trail
+  const t = Date.now();
+  for (let i = 1; i <= 7; i++) {
+    ctx.globalAlpha = (7 - i) / 7 * 0.55;
+    ctx.fillStyle = '#00ccff';
+    ctx.beginPath();
+    ctx.arc(-50 - i * 10, Math.sin(t / 80 + i * 1.3) * 6, Math.max(1, 5.5 - i * 0.6), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawProjectiles() {
+  projectiles.forEach(p => drawDragonSword(p.x, p.y, p.vx > 0 ? 1 : -1));
 }
 
 // ---- Fighter ----
@@ -164,6 +260,10 @@ class Fighter {
     this.hitStun = 0; this.blockStun = 0;
     this.atkHit = false;
     this.af = 0; this.atick = 0;
+    this.specialGauge = 0;
+    this.maxSpecialGauge = 100;
+    this.specialVx = 0;
+    this.specialFired = false;
   }
 
   hurtbox() {
@@ -173,6 +273,9 @@ class Fighter {
 
   hitbox() {
     const d = this.dir, s = this.def.scale, def = this.def;
+    // Special: ゆうり dropkick
+    if (this.state === 'special' && def.id === 'yuuri')
+      return { x: this.x + d * 8, y: this.y - 88 * s, w: d * 95 * s, h: 58 * s };
     if (this.state === 'punch' && this.st >= def.punchS && this.st <= def.punchE)
       return { x: this.x + d * 18 * s, y: this.y - 92 * s, w: d * 58 * s, h: 26 * s };
     if (this.state === 'kick'  && this.st >= def.kickS  && this.st <= def.kickE)
@@ -183,6 +286,8 @@ class Fighter {
   }
 
   damageInfo() {
+    if (this.state === 'special' && this.def.id === 'yuuri')
+      return { dmg: 35, stun: 42, push: 60 };
     const def = this.def;
     if (this.state === 'punch') return { dmg: def.punchDmg, stun: def.hitStunGiven, push: def.pushback };
     if (this.state === 'kick')  return { dmg: def.kickDmg,  stun: def.hitStunGiven, push: def.pushback };
@@ -193,6 +298,8 @@ class Fighter {
   takeHit(info, fromDir) {
     if (this.hitStun > 0 || this.state === 'dead') return false;
     const blocking = this.state === 'block' && this.dir !== fromDir;
+    // Gain gauge when hit
+    this.specialGauge = Math.min(this.maxSpecialGauge, this.specialGauge + 8);
     if (blocking) {
       this.hp -= Math.max(1, Math.floor(info.dmg * 0.1));
       this.blockStun = 14;
@@ -202,6 +309,8 @@ class Fighter {
       this.hitStun = info.stun;
       this.state = 'hurt'; this.st = 0;
       this.x += fromDir * info.push;
+      // Cancel special state on hit
+      if (this.state === 'special') { this.vy = 0; this.onGround = this.y >= GROUND; }
     }
     if (this.hp <= 0) { this.hp = 0; this.state = 'dead'; }
     return true;
@@ -214,6 +323,29 @@ class Fighter {
     if (this.hitStun > 0) this.hitStun--;
     if (this.blockStun > 0) this.blockStun--;
 
+    // ---- Special state handling ----
+    if (this.state === 'special') {
+      if (this.def.id === 'yuuri') {
+        // Flying dropkick physics
+        this.x += this.specialVx;
+        this.vy += this.def.gravity * 0.65;
+        this.y += this.vy;
+        if (this.y >= GROUND) {
+          this.y = GROUND; this.vy = 0; this.onGround = true;
+          this.state = 'idle'; this.st = 0;
+        }
+        this.x = Math.max(40, Math.min(W - 40, this.x));
+        if (this.x <= 41 || this.x >= W - 41) { this.state = 'idle'; this.st = 0; }
+      } else {
+        // いっちー: charge-up then release pose, spawn projectile at frame 9
+        if (this.st === 9 && !this.specialFired) this.specialFired = true;
+        if (this.st >= 26) { this.state = 'idle'; this.st = 0; }
+      }
+      if (this.hitStun === 0) this.dir = opp.x > this.x ? 1 : -1;
+      return;
+    }
+
+    // ---- Normal gravity ----
     if (!this.onGround) {
       this.vy += this.def.gravity; this.y += this.vy;
       if (this.y >= GROUND) {
@@ -222,12 +354,12 @@ class Fighter {
       }
     }
 
+    // Face opponent (not during attack)
     const atk = ['punch', 'kick', 'jatk'].includes(this.state);
-    if (this.hitStun === 0 && !atk)
-      this.dir = opp.x > this.x ? 1 : -1;
-
+    if (this.hitStun === 0 && !atk) this.dir = opp.x > this.x ? 1 : -1;
     if (this.hitStun > 0) return;
 
+    // Attack end
     if (atk) {
       const def = this.def;
       const dur = this.state === 'punch' ? def.punchDur : this.state === 'kick' ? def.kickDur : def.jatkDur;
@@ -237,6 +369,25 @@ class Fighter {
     if (this.state === 'hurt' && this.st >= this.def.hitStunGiven) { this.state = 'idle'; this.st = 0; }
 
     const ok = this.blockStun === 0;
+
+    // ---- Special activation ----
+    if (ok && inp.special && this.specialGauge >= this.maxSpecialGauge && this.onGround) {
+      this.state = 'special'; this.st = 0; this.specialGauge = 0; this.specialFired = false;
+      if (this.def.id === 'yuuri') {
+        this.specialVx = this.dir * 14;
+        this.vy = -8; this.onGround = false;
+        beep(200, 'sawtooth', 0.22, 0.5);
+        setTimeout(() => beep(150, 'square', 0.2, 0.4), 60);
+        screenFlash = { t: 10, color: '#ff4400' };
+      } else {
+        beep(880, 'sine', 0.14, 0.3);
+        setTimeout(() => beep(1320, 'triangle', 0.1, 0.25), 80);
+        screenFlash = { t: 10, color: '#00ccff' };
+      }
+      return;
+    }
+
+    // ---- Normal inputs ----
     if (ok && inp.block && this.onGround) {
       this.state = 'block';
     } else if (ok && inp.punch && this.onGround) {
@@ -266,6 +417,42 @@ class Fighter {
   }
 
   draw() {
+    // ゆうり dropkick: special flying draw
+    if (this.state === 'special' && this.def.id === 'yuuri') {
+      ctx.save();
+      ctx.translate(this.x, this.y - 35);
+      if (this.dir === -1) ctx.scale(-1, 1);
+      ctx.rotate(-0.42);
+      ctx.scale(this.def.scale, this.def.scale);
+      // Speed lines
+      ctx.strokeStyle = 'rgba(220,80,0,0.55)'; ctx.lineWidth = 3;
+      for (let i = 0; i < 6; i++) {
+        const ly = -18 + i * 10;
+        ctx.beginPath(); ctx.moveTo(-100 - i * 8, ly); ctx.lineTo(-60, ly); ctx.stroke();
+      }
+      this._shapeDropkick();
+      ctx.restore();
+
+      // Name label
+      ctx.fillStyle = this.def.c1;
+      ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(this.def.name, this.x, this.y - 145);
+      return;
+    }
+
+    // いっちー special: summoning aura
+    if (this.state === 'special' && this.def.id === 'icchi') {
+      const aura = Math.min(1, this.st / 10);
+      ctx.save();
+      ctx.globalAlpha = aura * 0.35;
+      ctx.fillStyle = '#00ccff';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y - 70, 45 * aura, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
     const flash = this.hitStun > 0 && Math.floor(this.hitStun / 3) % 2 === 0;
     if (flash) return;
     ctx.save();
@@ -276,8 +463,7 @@ class Fighter {
     ctx.restore();
 
     ctx.fillStyle = this.def.c1;
-    ctx.font = 'bold 13px Arial';
-    ctx.textAlign = 'center';
+    ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
     ctx.fillText(this.def.name, this.x, this.y - 130 * this.def.scale - 5);
   }
 
@@ -292,6 +478,10 @@ class Fighter {
                     (s === 'jatk' && this.st >= def.jatkS && this.st <= def.jatkE);
     const base = -cr;
 
+    // Special idle pose for いっちー (summoning arms raised)
+    const isIcchiSpecial = s === 'special' && def.id === 'icchi';
+    const chargeRaise = isIcchiSpecial ? Math.min(1, this.st / 9) : 0;
+
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath(); ctx.ellipse(0, 2, 26, 7, 0, 0, Math.PI * 2); ctx.fill();
@@ -299,54 +489,106 @@ class Fighter {
     // Legs
     ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.strokeStyle = c2;
     if (kickOn) {
-      ctx.beginPath(); ctx.moveTo(0, base - 18); ctx.lineTo(-10, base - 40 + cr); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, base - 18); ctx.lineTo(52, base - 36 + cr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, base-18); ctx.lineTo(-10, base-40+cr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, base-18); ctx.lineTo(52, base-36+cr); ctx.stroke();
     } else {
       const ls = s === 'jump' || s === 'jatk' ? 12 : Math.abs(swing) * 0.6;
-      ctx.beginPath(); ctx.moveTo(0, base - 18); ctx.lineTo(-10 - ls, base - 42 + cr * 0.5); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, base - 18); ctx.lineTo(10 + ls, base - 42 + cr * 0.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, base-18); ctx.lineTo(-10-ls, base-42+cr*0.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, base-18); ctx.lineTo(10+ls, base-42+cr*0.5); ctx.stroke();
     }
 
     // Body
-    ctx.fillStyle = c1;
-    ctx.fillRect(-bw / 2, base - 84 + cr, bw, 48);
-    ctx.fillStyle = c2;
-    ctx.fillRect(-bw / 2, base - 44 + cr, bw, 8);
+    ctx.fillStyle = c1; ctx.fillRect(-bw/2, base-84+cr, bw, 48);
+    ctx.fillStyle = c2; ctx.fillRect(-bw/2, base-44+cr, bw, 8);
 
     // Arms
     ctx.lineWidth = lw; ctx.strokeStyle = c1;
     if (punchOn) {
-      ctx.beginPath(); ctx.moveTo(bw / 2 - 4, base - 74 + cr); ctx.lineTo(bw / 2 + 46, base - 74 + cr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bw/2-4, base-74+cr); ctx.lineTo(bw/2+46, base-74+cr); ctx.stroke();
       ctx.fillStyle = '#FFCC99';
-      ctx.beginPath(); ctx.arc(bw / 2 + 46, base - 74 + cr, lw * 0.75, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-bw / 2 + 4, base - 74 + cr); ctx.lineTo(-bw / 2 - 14, base - 60 + cr); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bw/2+46, base-74+cr, lw*0.75, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-bw/2+4, base-74+cr); ctx.lineTo(-bw/2-14, base-60+cr); ctx.stroke();
     } else if (s === 'block') {
-      ctx.beginPath(); ctx.moveTo(bw / 2 - 4, base - 80 + cr); ctx.lineTo(bw / 2 + 14, base - 96 + cr); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-bw / 2 + 4, base - 74 + cr); ctx.lineTo(-bw / 2 + 14, base - 96 + cr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bw/2-4, base-80+cr); ctx.lineTo(bw/2+14, base-96+cr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-bw/2+4, base-74+cr); ctx.lineTo(-bw/2+14, base-96+cr); ctx.stroke();
+    } else if (isIcchiSpecial) {
+      // Arms raised/spread gathering energy
+      const raise = chargeRaise * 30;
+      ctx.beginPath(); ctx.moveTo(bw/2-4, base-78+cr); ctx.lineTo(bw/2+20, base-95-raise+cr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-bw/2+4, base-78+cr); ctx.lineTo(-bw/2-20, base-95-raise+cr); ctx.stroke();
+      // Energy orbs at hand tips
+      if (chargeRaise > 0.3) {
+        ctx.globalAlpha = chargeRaise;
+        ctx.fillStyle = '#00eeff';
+        ctx.shadowBlur = 10; ctx.shadowColor = '#00ccff';
+        ctx.beginPath(); ctx.arc(bw/2+20, base-95-raise+cr, 6*chargeRaise, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-bw/2-20, base-95-raise+cr, 6*chargeRaise, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      }
     } else {
-      ctx.beginPath(); ctx.moveTo(bw / 2 - 4, base - 78 + cr); ctx.lineTo(bw / 2 + 12, base - 58 + cr + swing); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-bw / 2 + 4, base - 78 + cr); ctx.lineTo(-bw / 2 - 12, base - 58 + cr - swing); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bw/2-4, base-78+cr); ctx.lineTo(bw/2+12, base-58+cr+swing); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-bw/2+4, base-78+cr); ctx.lineTo(-bw/2-12, base-58+cr-swing); ctx.stroke();
     }
 
     // Head
     const hbob = s === 'walk' ? Math.sin(this.af * Math.PI) * 2 : 0;
     const hy = base - 106 + cr + hbob;
     ctx.fillStyle = '#FFCC99';
-    ctx.beginPath(); ctx.arc(0, hy, 18, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, hy, 18, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = s === 'dead' ? '#666' : c1;
-    ctx.beginPath(); ctx.arc(0, hy - 10, 13, Math.PI, 0); ctx.fill();
-    ctx.fillStyle = c2;
-    ctx.fillRect(-18, hy - 7, 36, 6);
+    ctx.beginPath(); ctx.arc(0, hy-10, 13, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = c2; ctx.fillRect(-18, hy-7, 36, 6);
     if (s === 'hurt' || s === 'dead') {
       ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(3, hy - 4); ctx.lineTo(9, hy + 1);
-      ctx.moveTo(9, hy - 4); ctx.lineTo(3, hy + 1);
+      ctx.moveTo(3, hy-4); ctx.lineTo(9, hy+1);
+      ctx.moveTo(9, hy-4); ctx.lineTo(3, hy+1);
       ctx.stroke();
     } else {
-      ctx.fillStyle = '#222';
-      ctx.fillRect(4, hy - 5, 5, 4);
+      ctx.fillStyle = '#222'; ctx.fillRect(4, hy-5, 5, 4);
     }
+  }
+
+  _shapeDropkick() {
+    const c1 = this.def.c1, c2 = this.def.c2, lw = this.def.limbW;
+
+    // Ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(0, 55, 38, 9, 0, 0, Math.PI*2); ctx.fill();
+
+    // Trail leg (back)
+    ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.strokeStyle = c2;
+    ctx.beginPath(); ctx.moveTo(-12, 5); ctx.lineTo(-44, 16); ctx.stroke();
+
+    // Lead leg (extended forward — the kick)
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(68, -10); ctx.stroke();
+    ctx.fillStyle = c2;
+    ctx.beginPath(); ctx.ellipse(74, -10, 14, 9, -0.25, 0, Math.PI*2); ctx.fill();
+    // Boot highlight
+    ctx.fillStyle = 'rgba(255,180,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(72, -13, 8, 4, -0.3, 0, Math.PI*2); ctx.fill();
+
+    // Body (horizontal)
+    ctx.fillStyle = c1; ctx.fillRect(-46, -22, 52, 30);
+    ctx.fillStyle = c2; ctx.fillRect(-46, -7, 52, 9);
+
+    // Arms stretched behind
+    ctx.lineWidth = lw; ctx.strokeStyle = c1;
+    ctx.beginPath(); ctx.moveTo(-40, -18); ctx.lineTo(-72, -30); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-40, 7);  ctx.lineTo(-70, 20);  ctx.stroke();
+
+    // Head (forward, fierce)
+    ctx.fillStyle = '#FFCC99';
+    ctx.beginPath(); ctx.arc(20, -22, 18, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = c1;
+    ctx.beginPath(); ctx.arc(20, -32, 12, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = c2; ctx.fillRect(2, -30, 36, 6);
+    // Fierce angled eyes
+    ctx.fillStyle = '#222';
+    ctx.save(); ctx.translate(24, -25); ctx.rotate(0.35);
+    ctx.fillRect(0, 0, 6, 3); ctx.restore();
+    ctx.save(); ctx.translate(15, -25); ctx.rotate(0.35);
+    ctx.fillRect(0, 0, 5, 3); ctx.restore();
   }
 }
 
@@ -359,52 +601,35 @@ class CPU {
   update() {
     const dist = Math.abs(this.me.x - this.opp.x);
     if (--this.timer <= 0) {
-      const spd = this.me.def.walkSpd;
-      this.timer = spd > 5 ? 8 + Math.random() * 15 : 18 + Math.random() * 28;
+      const fast = this.me.def.walkSpd > 5;
+      this.timer = fast ? 8 + Math.random() * 15 : 18 + Math.random() * 28;
       const r = Math.random();
-      if (dist < 85)
-        this.action = r < 0.35 ? 'punch' : r < 0.6 ? 'kick' : r < 0.75 ? 'block' : 'back';
-      else if (dist < 170)
-        this.action = r < 0.5 ? 'fwd' : r < 0.7 ? 'punch' : r < 0.8 ? 'jump' : 'idle';
-      else
-        this.action = r < 0.65 ? 'fwd' : r < 0.8 ? 'jump' : 'idle';
+      if (dist < 85)       this.action = r < 0.35 ? 'punch' : r < 0.6 ? 'kick' : r < 0.75 ? 'block' : 'back';
+      else if (dist < 170) this.action = r < 0.5 ? 'fwd' : r < 0.7 ? 'punch' : r < 0.8 ? 'jump' : 'idle';
+      else                 this.action = r < 0.65 ? 'fwd' : r < 0.8 ? 'jump' : 'idle';
     }
     const toward = this.opp.x > this.me.x;
-    const inp = { punch: false, kick: false, left: false, right: false, up: false, down: false, block: false };
+    const inp = { punch:false, kick:false, left:false, right:false, up:false, down:false, block:false, special:false };
     const accuracy = this.me.def.id === 'icchi' ? 0.78 : 0.68;
     if (Math.random() < accuracy) {
       if (this.action === 'punch') inp.punch = true;
       else if (this.action === 'kick') inp.kick = true;
-      else if (this.action === 'fwd') inp[toward ? 'right' : 'left'] = true;
+      else if (this.action === 'fwd')  inp[toward ? 'right' : 'left'] = true;
       else if (this.action === 'back') inp[toward ? 'left' : 'right'] = true;
       else if (this.action === 'jump') { inp.up = true; inp[toward ? 'right' : 'left'] = true; }
       else if (this.action === 'block') inp.block = true;
+    }
+    // Special move: use when gauge is full and conditions are good
+    const full = this.me.specialGauge >= this.me.maxSpecialGauge;
+    if (full && this.me.onGround && this.me.state === 'idle') {
+      const useIt = this.me.def.id === 'yuuri' ? dist < 220 : true;
+      if (useIt && Math.random() < 0.6) inp.special = true;
     }
     return inp;
   }
 }
 
-// ---- Game state ----
-let phase = 'intro'; // intro | charselect | countdown | fight | roundend
-let p1, p2, cpuCtrl;
-let timerSec = 99, timerTick = 0;
-let wins = [0, 0];
-let roundNum = 1;
-let flash = { msg: '', t: 0 };
-let endTimer = 0;
-let selectedCharIdx = 0; // 0=いっちー, 1=ゆうり
-
-function showFlash(msg, dur) { flash.msg = msg; flash.t = dur; }
-
-function startRound() {
-  const p1def = CHAR_LIST[selectedCharIdx];
-  const p2def = CHAR_LIST[1 - selectedCharIdx];
-  p1 = new Fighter(200, true, p1def);
-  p2 = new Fighter(600, false, p2def);
-  cpuCtrl = new CPU(p2, p1);
-  timerSec = 99; timerTick = 0;
-}
-
+// ---- Collision check ----
 function checkCollision(a, b) {
   if (a.atkHit) return;
   const hb = a.hitbox(); if (!hb) return;
@@ -416,150 +641,187 @@ function checkCollision(a, b) {
     const info = a.damageInfo();
     if (info && b.takeHit(info, a.dir)) {
       a.atkHit = true;
-      spawnHit((a.x + b.x) / 2, b.y - 72);
+      // Attacker gains gauge on hit
+      a.specialGauge = Math.min(a.maxSpecialGauge, a.specialGauge + 12);
+      const big = a.state === 'special';
+      spawnHit((a.x + b.x) / 2, b.y - 72, big);
     }
   }
+}
+
+// ---- Game state ----
+let phase = 'intro';
+let p1, p2, cpuCtrl;
+let timerSec = 99, timerTick = 0;
+let wins = [0, 0];
+let roundNum = 1;
+let flash = { msg: '', t: 0 };
+let endTimer = 0;
+let selectedCharIdx = 0;
+
+function showFlash(msg, dur) { flash.msg = msg; flash.t = dur; }
+
+function startRound() {
+  const p1def = CHAR_LIST[selectedCharIdx];
+  const p2def = CHAR_LIST[1 - selectedCharIdx];
+  p1 = new Fighter(200, true, p1def);
+  p2 = new Fighter(600, false, p2def);
+  cpuCtrl = new CPU(p2, p1);
+  projectiles.length = 0;
+  timerSec = 99; timerTick = 0;
 }
 
 // ---- HUD ----
 function drawHUD() {
   const hpColor = hp => hp > 50 ? '#22dd22' : hp > 25 ? '#ddaa00' : '#dd2222';
 
-  ctx.fillStyle = '#222'; ctx.fillRect(20, 18, 300, 24);
-  const w1 = (p1.hp / p1.maxHp) * 300;
-  ctx.fillStyle = hpColor(p1.hp); ctx.fillRect(20, 18, w1, 24);
-  ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.strokeRect(20, 18, 300, 24);
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'left';
-  ctx.fillText(p1.def.name, 26, 35);
+  // P1 HP
+  ctx.fillStyle = '#222'; ctx.fillRect(20, 18, 300, 22);
+  ctx.fillStyle = hpColor(p1.hp); ctx.fillRect(20, 18, (p1.hp / p1.maxHp) * 300, 22);
+  ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.strokeRect(20, 18, 300, 22);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'left';
+  ctx.fillText(p1.def.name, 25, 34);
 
-  ctx.fillStyle = '#222'; ctx.fillRect(W - 320, 18, 300, 24);
+  // P1 Special gauge
+  const sg1 = (p1.specialGauge / p1.maxSpecialGauge);
+  ctx.fillStyle = '#111'; ctx.fillRect(20, 43, 300, 11);
+  const gc1 = ctx.createLinearGradient(20, 0, 320, 0);
+  gc1.addColorStop(0, '#ff6600'); gc1.addColorStop(1, '#ffdd00');
+  ctx.fillStyle = gc1; ctx.fillRect(20, 43, sg1 * 300, 11);
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(20, 43, 300, 11);
+  if (p1.specialGauge >= p1.maxSpecialGauge && Math.floor(Date.now() / 280) % 2) {
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'left';
+    ctx.fillText('必殺技 READY!', 24, 52);
+  }
+
+  // P2 HP
+  ctx.fillStyle = '#222'; ctx.fillRect(W-320, 18, 300, 22);
   const w2 = (p2.hp / p2.maxHp) * 300;
-  ctx.fillStyle = hpColor(p2.hp); ctx.fillRect(W - 320 + (300 - w2), 18, w2, 24);
-  ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.strokeRect(W - 320, 18, 300, 24);
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
-  ctx.fillText(p2.def.name + '(CPU)', W - 26, 35);
+  ctx.fillStyle = hpColor(p2.hp); ctx.fillRect(W-320 + (300-w2), 18, w2, 22);
+  ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.strokeRect(W-320, 18, 300, 22);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'right';
+  ctx.fillText(p2.def.name + '(CPU)', W-25, 34);
 
-  ctx.fillStyle = '#111'; ctx.fillRect(W / 2 - 32, 14, 64, 34);
-  ctx.strokeStyle = '#666'; ctx.strokeRect(W / 2 - 32, 14, 64, 34);
+  // P2 Special gauge (fills from right)
+  const sg2 = (p2.specialGauge / p2.maxSpecialGauge);
+  ctx.fillStyle = '#111'; ctx.fillRect(W-320, 43, 300, 11);
+  const gc2 = ctx.createLinearGradient(W-320, 0, W-20, 0);
+  gc2.addColorStop(0, '#ffdd00'); gc2.addColorStop(1, '#ff6600');
+  ctx.fillStyle = gc2; ctx.fillRect(W-320 + (300 - sg2*300), 43, sg2*300, 11);
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(W-320, 43, 300, 11);
+  if (p2.specialGauge >= p2.maxSpecialGauge && Math.floor(Date.now() / 280) % 2) {
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'right';
+    ctx.fillText('必殺技 READY!', W-24, 52);
+  }
+
+  // Timer
+  ctx.fillStyle = '#111'; ctx.fillRect(W/2-32, 14, 64, 34);
+  ctx.strokeStyle = '#666'; ctx.strokeRect(W/2-32, 14, 64, 34);
   ctx.fillStyle = timerSec <= 10 ? '#ff4444' : '#ffdd00';
   ctx.font = 'bold 26px Arial'; ctx.textAlign = 'center';
-  ctx.fillText(Math.ceil(timerSec), W / 2, 40);
+  ctx.fillText(Math.ceil(timerSec), W/2, 40);
 
+  // Win orbs
   for (let i = 0; i < 2; i++) {
     ctx.fillStyle = i < wins[0] ? '#ffdd00' : '#333';
-    ctx.beginPath(); ctx.arc(55 + i * 18, 58, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(55 + i*18, 62, 7, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = '#777'; ctx.stroke();
   }
   for (let i = 0; i < 2; i++) {
     ctx.fillStyle = i < wins[1] ? '#ffdd00' : '#333';
-    ctx.beginPath(); ctx.arc(W - 55 - i * 18, 58, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W-55-i*18, 62, 7, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = '#777'; ctx.stroke();
   }
 }
 
-function drawFlash() {
+function drawFlashMsg() {
   if (flash.t <= 0) return;
   const alpha = Math.min(1, flash.t / 20);
   ctx.globalAlpha = alpha;
   ctx.font = 'bold 62px Arial'; ctx.textAlign = 'center';
   ctx.strokeStyle = '#880000'; ctx.lineWidth = 5;
-  ctx.strokeText(flash.msg, W / 2, H / 2 - 10);
+  ctx.strokeText(flash.msg, W/2, H/2 - 10);
   ctx.fillStyle = '#ffdd00';
-  ctx.fillText(flash.msg, W / 2, H / 2 - 10);
-  ctx.globalAlpha = 1;
-  flash.t--;
+  ctx.fillText(flash.msg, W/2, H/2 - 10);
+  ctx.globalAlpha = 1; flash.t--;
 }
 
 // ---- Intro screen ----
 function drawIntro() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-
-  // Title
   ctx.font = 'bold 68px Arial'; ctx.textAlign = 'center';
   ctx.strokeStyle = '#880000'; ctx.lineWidth = 6;
-  ctx.strokeText('いっちー vs ゆうり', W / 2, 160);
+  ctx.strokeText('いっちー vs ゆうり', W/2, 155);
   ctx.fillStyle = '#ffdd00';
-  ctx.fillText('いっちー vs ゆうり', W / 2, 160);
-
+  ctx.fillText('いっちー vs ゆうり', W/2, 155);
   ctx.font = '20px Arial'; ctx.fillStyle = '#aaa';
-  ctx.fillText('対戦格闘ゲーム', W / 2, 210);
-
+  ctx.fillText('対戦格闘ゲーム', W/2, 205);
   ctx.font = '16px monospace'; ctx.fillStyle = '#888';
-  ctx.fillText('A / D  移動   W  ジャンプ   S  しゃがみ', W / 2, 275);
-  ctx.fillText('J  パンチ   K  キック   L  ガード', W / 2, 300);
-
+  ctx.fillText('A/D 移動   W ジャンプ   S しゃがみ', W/2, 268);
+  ctx.fillText('J パンチ   K キック   L ガード', W/2, 292);
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillText('Space: 必殺技ゲージMAXで必殺技発動！', W/2, 316);
   if (Math.floor(Date.now() / 500) % 2) {
     ctx.font = 'bold 26px Arial'; ctx.fillStyle = '#ffdd00';
-    ctx.fillText('SPACE か ENTER でスタート', W / 2, 380);
+    ctx.fillText('SPACE か ENTER でスタート', W/2, 380);
   }
 }
 
-// ---- Character select screen ----
+// ---- Character select ----
 function drawCharSelect() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-
-  // Title
   ctx.font = 'bold 32px Arial'; ctx.textAlign = 'center';
   ctx.fillStyle = '#ffdd00';
-  ctx.fillText('キャラクター選択', W / 2, 50);
-  ctx.font = '16px Arial'; ctx.fillStyle = '#888';
-  ctx.fillText('← → で選択　　SPACE / ENTER で決定', W / 2, 80);
+  ctx.fillText('キャラクター選択', W/2, 48);
+  ctx.font = '15px Arial'; ctx.fillStyle = '#888';
+  ctx.fillText('← → で選択　　SPACE / ENTER で決定', W/2, 75);
 
-  const panels = [
-    { x: 100, def: CHARS.icchi },
-    { x: 500, def: CHARS.yuuri },
-  ];
-
+  const panels = [{ x: 80, def: CHARS.icchi }, { x: 480, def: CHARS.yuuri }];
   panels.forEach((p, idx) => {
     const selected = idx === selectedCharIdx;
     const blink = Math.floor(Date.now() / 300) % 2;
-
-    // Panel box
-    ctx.strokeStyle = selected ? (blink ? '#ffdd00' : '#ffaa00') : '#444';
+    ctx.strokeStyle = selected ? (blink ? '#ffdd00' : '#ff8800') : '#444';
     ctx.lineWidth = selected ? 4 : 2;
-    ctx.fillStyle = selected ? 'rgba(255,220,0,0.08)' : 'rgba(255,255,255,0.03)';
-    ctx.fillRect(p.x, 95, 200, 300);
-    ctx.strokeRect(p.x, 95, 200, 300);
+    ctx.fillStyle = selected ? 'rgba(255,200,0,0.07)' : 'rgba(255,255,255,0.02)';
+    ctx.fillRect(p.x, 90, 240, 320); ctx.strokeRect(p.x, 90, 240, 320);
 
-    // Draw mini-character preview
+    // Mini character
     ctx.save();
-    ctx.translate(p.x + 100, 270);
-    const scale = p.def.scale * 1.1;
-    ctx.scale(scale, scale);
-    // Fake a Fighter for preview drawing
+    ctx.translate(p.x + 120, 270);
+    const sc = p.def.scale * 1.05;
+    ctx.scale(sc, sc);
     const dummy = Object.create(Fighter.prototype);
-    dummy.def = p.def; dummy.state = 'idle'; dummy.st = 0; dummy.af = Math.floor(Date.now() / 200) % 2; dummy.atick = 0;
+    dummy.def = p.def; dummy.state = 'idle'; dummy.st = 0;
+    dummy.af = Math.floor(Date.now() / 200) % 2; dummy.atick = 0;
     dummy._shape.call(dummy);
     ctx.restore();
 
-    // Character name
+    // Name
     ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center';
     ctx.fillStyle = p.def.c1;
-    ctx.fillText(p.def.name, p.x + 100, 340);
+    ctx.fillText(p.def.name, p.x + 120, 335);
 
-    // Type label
-    ctx.font = 'bold 16px Arial';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(p.def.desc, p.x + 100, 362);
+    // Type
+    ctx.font = 'bold 15px Arial'; ctx.fillStyle = '#fff';
+    ctx.fillText(p.def.desc, p.x + 120, 356);
 
-    // Flavor text
-    ctx.font = '13px Arial'; ctx.fillStyle = '#999';
-    p.def.flavor.forEach((line, li) => {
-      ctx.fillText(line, p.x + 100, 382 + li * 16);
-    });
+    // Special name
+    ctx.font = 'bold 13px Arial'; ctx.fillStyle = '#ffaa00';
+    ctx.fillText('必殺技: ' + p.def.specialName, p.x + 120, 374);
 
-    // VS label in middle
-    if (idx === 0) {
-      ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
-      ctx.fillStyle = '#ff4444';
-      ctx.fillText('VS', W / 2, 250);
-    }
+    // Flavor
+    ctx.font = '12px Arial'; ctx.fillStyle = '#999';
+    p.def.flavor.forEach((line, li) => ctx.fillText(line, p.x + 120, 392 + li * 15));
 
-    // "あなた" / "CPU" label
-    ctx.font = 'bold 14px Arial';
+    // Label
+    ctx.font = 'bold 13px Arial';
     ctx.fillStyle = selected ? '#ffdd00' : '#555';
-    ctx.fillText(selected ? '▶ あなた' : 'CPU', p.x + 100, 112);
+    ctx.fillText(selected ? '▶ あなた' : 'CPU', p.x + 120, 107);
   });
+
+  ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff4444';
+  ctx.fillText('VS', W/2, 260);
 }
 
 // ---- Main loop ----
@@ -568,10 +830,7 @@ function loop() {
 
   if (phase === 'intro') {
     drawIntro();
-    if (keyOnce('Space') || keyOnce('Enter')) {
-      phase = 'charselect';
-      beep(440, 'sine', 0.1);
-    }
+    if (keyOnce('Space') || keyOnce('Enter')) { phase = 'charselect'; beep(440, 'sine', 0.1); }
     return;
   }
 
@@ -581,8 +840,7 @@ function loop() {
     if (keyOnce('ArrowRight') || keyOnce('KeyD')) { selectedCharIdx = 1; beep(350, 'sine', 0.08); }
     if (keyOnce('Space') || keyOnce('Enter') || keyOnce('KeyJ')) {
       wins = [0, 0]; roundNum = 1;
-      startRound();
-      phase = 'countdown';
+      startRound(); phase = 'countdown';
       showFlash(`ROUND ${roundNum}`, 80);
       setTimeout(() => showFlash('FIGHT!', 70), 1200);
       setTimeout(() => { phase = 'fight'; }, 1800);
@@ -591,28 +849,44 @@ function loop() {
     return;
   }
 
-  drawBackground();
+  // Screen flash overlay
+  if (screenFlash.t > 0) {
+    drawBackground();
+    ctx.globalAlpha = (screenFlash.t / 10) * 0.45;
+    ctx.fillStyle = screenFlash.color;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+    screenFlash.t--;
+  } else {
+    drawBackground();
+  }
 
   if (phase === 'fight') {
     if (++timerTick >= 60) { timerTick = 0; timerSec--; }
 
     const i1 = {
       punch: keys['KeyJ'], kick: keys['KeyK'],
-      left:  keys['KeyA'], right: keys['KeyD'],
-      up:    keys['KeyW'], down:  keys['KeyS'],
-      block: keys['KeyL'],
+      left: keys['KeyA'], right: keys['KeyD'],
+      up: keys['KeyW'], down: keys['KeyS'],
+      block: keys['KeyL'], special: keys['Space'],
     };
     const i2 = cpuCtrl.update();
 
     p1.update(p2, i1);
     p2.update(p1, i2);
+
+    // Spawn dragon sword projectile
+    if (p1.specialFired) { p1.specialFired = false; spawnDragonSword(p1); }
+    if (p2.specialFired) { p2.specialFired = false; spawnDragonSword(p2); }
+
+    updateProjectiles(p1, p2);
     checkCollision(p1, p2);
     checkCollision(p2, p1);
 
     const p1ko = p1.hp <= 0, p2ko = p2.hp <= 0, timeout = timerSec <= 0;
     if (p1ko || p2ko || timeout) {
       let p1wins;
-      if (timeout) p1wins = p1.hp >= p2.hp ? (p1.hp > p2.hp ? true : null) : false;
+      if (timeout) p1wins = p1.hp > p2.hp ? true : p1.hp < p2.hp ? false : null;
       else if (p2ko && !p1ko) p1wins = true;
       else if (p1ko && !p2ko) p1wins = false;
       else p1wins = null;
@@ -620,9 +894,7 @@ function loop() {
       if (p1wins === true)       { wins[0]++; showFlash(`${p1.def.name} WIN!`, 130); beep(523, 'sine', 0.6, 0.4); }
       else if (p1wins === false) { wins[1]++; showFlash('CPU WIN!', 130); beep(330, 'sine', 0.6, 0.35); }
       else                        { showFlash('DRAW!', 130); }
-
-      phase = 'roundend';
-      endTimer = 200;
+      phase = 'roundend'; endTimer = 200;
     }
   }
 
@@ -630,27 +902,25 @@ function loop() {
     if (phase === 'roundend' && --endTimer <= 0) {
       if (wins[0] >= 2 || wins[1] >= 2) {
         wins = [0, 0]; roundNum = 1;
-        phase = 'charselect';
-        return;
+        phase = 'charselect'; return;
       }
       roundNum++;
-      startRound();
-      phase = 'countdown';
+      startRound(); phase = 'countdown';
       showFlash(`ROUND ${roundNum}`, 80);
       setTimeout(() => showFlash('FIGHT!', 70), 1200);
       setTimeout(() => { phase = 'fight'; }, 1800);
     }
   }
 
-  p1.draw();
-  p2.draw();
+  p1.draw(); p2.draw();
+  drawProjectiles();
   drawEffects();
   drawHUD();
-  drawFlash();
+  drawFlashMsg();
 
   ctx.fillStyle = 'rgba(255,255,255,0.28)';
   ctx.font = '11px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('A/D 移動  W ジャンプ  S しゃがみ  J パンチ  K キック  L ガード', W / 2, H - 8);
+  ctx.fillText('A/D 移動  W ジャンプ  S しゃがみ  J パンチ  K キック  L ガード  Space 必殺技', W/2, H-8);
 }
 
 requestAnimationFrame(loop);
