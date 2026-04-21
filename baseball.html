@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>野球ゲーム</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #1a472a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+h1 { font-size: 2rem; margin-bottom: 10px; text-shadow: 2px 2px 4px #000; }
+
+.scoreboard {
+  background: #111;
+  border: 3px solid #f59e0b;
+  border-radius: 12px;
+  padding: 12px 30px;
+  margin-bottom: 14px;
+  display: flex;
+  gap: 40px;
+  font-size: 1.1rem;
+  align-items: center;
+}
+.scoreboard .team { text-align: center; }
+.scoreboard .score-num { font-size: 2.2rem; font-weight: bold; color: #f59e0b; }
+.inning-info { text-align: center; font-size: 0.95rem; color: #aaa; }
+
+.count-board {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 14px;
+  background: #222;
+  padding: 10px 30px;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+.count-item { text-align: center; }
+.count-item .label { color: #aaa; font-size: 0.85rem; }
+.dots { display: flex; gap: 5px; margin-top: 4px; justify-content: center; }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: #444; border: 2px solid #888; }
+.dot.on { background: #f59e0b; border-color: #f59e0b; }
+
+/* Field */
+.field-wrap {
+  position: relative;
+  width: 400px;
+  height: 280px;
+  margin-bottom: 14px;
+}
+canvas#field { border-radius: 12px; }
+
+/* Bases */
+.bases {
+  position: absolute;
+  top: 30px; left: 50%;
+  transform: translateX(-50%);
+  width: 120px; height: 120px;
+}
+.base {
+  position: absolute;
+  width: 22px; height: 22px;
+  background: #555;
+  border: 2px solid #888;
+  transform: rotate(45deg);
+  transition: background 0.2s;
+}
+.base.on { background: #f59e0b; border-color: #fff; }
+#base2 { top: 0; left: 50%; transform: translateX(-50%) rotate(45deg); }
+#base3 { top: 50%; left: 0; transform: translateY(-50%) rotate(45deg); }
+#base1 { top: 50%; right: 0; transform: translateY(-50%) rotate(45deg); }
+#home  { bottom: 0; left: 50%; transform: translateX(-50%) rotate(45deg); }
+
+.pitch-area {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+/* Power bar */
+.power-wrap {
+  width: 300px;
+  margin-bottom: 14px;
+}
+.power-label { text-align: center; margin-bottom: 4px; font-size: 0.9rem; color: #ccc; }
+.power-bar-bg {
+  width: 100%;
+  height: 22px;
+  background: #333;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid #555;
+}
+.power-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
+  border-radius: 10px;
+  transition: none;
+}
+
+.btn-hit {
+  padding: 14px 60px;
+  font-size: 1.4rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 4px 15px rgba(239,68,68,0.5);
+  transition: transform 0.1s;
+  margin-bottom: 10px;
+}
+.btn-hit:hover { transform: scale(1.05); }
+.btn-hit:disabled { background: #555; box-shadow: none; cursor: not-allowed; }
+
+.message {
+  font-size: 1.5rem;
+  font-weight: bold;
+  min-height: 2rem;
+  text-align: center;
+  text-shadow: 1px 1px 3px #000;
+  margin-bottom: 8px;
+}
+.message.hit { color: #22c55e; }
+.message.out { color: #ef4444; }
+.message.ball { color: #60a5fa; }
+.message.strike { color: #f59e0b; }
+
+.btn-next {
+  padding: 10px 40px;
+  font-size: 1rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  display: none;
+}
+.btn-next:hover { background: #4f5fcf; }
+
+.btn-reset {
+  margin-top: 10px;
+  padding: 8px 30px;
+  font-size: 0.9rem;
+  background: #444;
+  color: #ccc;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn-reset:hover { background: #666; }
+
+.out-display { display: flex; gap: 6px; justify-content: center; margin-top: 4px; }
+
+#ball-anim {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: none;
+  pointer-events: none;
+  transition: none;
+  font-size: 0;
+}
+#pitch-label {
+  position: absolute;
+  top: 6px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  font-weight: bold;
+  padding: 2px 10px;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<h1>⚾ 野球ゲーム</h1>
+
+<div class="scoreboard">
+  <div class="team">あなた<br><span class="score-num" id="scorePlayer">0</span></div>
+  <div style="text-align:center">
+    <div id="inningLabel" style="font-size:1rem;color:#aaa">1回表</div>
+    <div style="font-size:0.85rem;color:#777;margin-top:4px">9イニング制</div>
+  </div>
+  <div class="team">CPU<br><span class="score-num" id="scoreCpu">0</span></div>
+</div>
+
+<div class="count-board">
+  <div class="count-item">
+    <div class="label">ボール</div>
+    <div class="dots" id="balls">
+      <div class="dot" id="b0"></div>
+      <div class="dot" id="b1"></div>
+      <div class="dot" id="b2"></div>
+    </div>
+  </div>
+  <div class="count-item">
+    <div class="label">ストライク</div>
+    <div class="dots" id="strikes">
+      <div class="dot" id="s0"></div>
+      <div class="dot" id="s1"></div>
+    </div>
+  </div>
+  <div class="count-item">
+    <div class="label">アウト</div>
+    <div class="dots">
+      <div class="dot" id="o0"></div>
+      <div class="dot" id="o1"></div>
+    </div>
+  </div>
+</div>
+
+<div class="field-wrap">
+  <canvas id="field" width="400" height="280"></canvas>
+  <div id="ball-anim"></div>
+  <div id="pitch-label"></div>
+</div>
+
+<div class="power-wrap">
+  <div class="power-label">タイミングを合わせて「打て！」を押せ</div>
+  <div class="power-bar-bg"><div class="power-bar" id="powerBar"></div></div>
+</div>
+
+<div class="message" id="message">「打て！」を押してバッティング！</div>
+<button class="btn-hit" id="btnHit" onclick="swing()">⚾ 打て！</button>
+<button class="btn-next" id="btnNext" onclick="nextPitch()">次の投球 ▶</button>
+<button class="btn-reset" onclick="resetGame()">リセット</button>
+
+<script>
+const TOTAL_INNINGS = 9;
+let state = {
+  inning: 1,
+  isTop: true, // top = player bats
+  balls: 0, strikes: 0, outs: 0,
+  bases: [false, false, false], // 1st, 2nd, 3rd
+  scorePlayer: 0, scoreCpu: 0,
+  phase: 'pitching', // pitching | result
+  powerDir: 1,
+  power: 0,
+  pitchType: '',
+  gameOver: false
+};
+
+let animFrame;
+let pitchAnimId;
+
+// Draw field
+const canvas = document.getElementById('field');
+const ctx = canvas.getContext('2d');
+function drawField() {
+  ctx.clearRect(0, 0, 400, 280);
+  // Sky/grass
+  ctx.fillStyle = '#2d6a4f';
+  ctx.fillRect(0, 0, 400, 280);
+  // Infield dirt
+  ctx.fillStyle = '#c2956c';
+  ctx.beginPath();
+  ctx.arc(200, 230, 160, Math.PI, 2 * Math.PI);
+  ctx.fill();
+  // Grass infield
+  ctx.fillStyle = '#40916c';
+  ctx.beginPath();
+  ctx.arc(200, 220, 100, 0, 2 * Math.PI);
+  ctx.fill();
+  // Pitcher mound
+  ctx.fillStyle = '#b5835a';
+  ctx.beginPath();
+  ctx.ellipse(200, 180, 18, 12, 0, 0, 2 * Math.PI);
+  ctx.fill();
+  // Home plate
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.moveTo(200, 255);
+  ctx.lineTo(212, 248);
+  ctx.lineTo(212, 238);
+  ctx.lineTo(188, 238);
+  ctx.lineTo(188, 248);
+  ctx.closePath();
+  ctx.fill();
+  // Base paths
+  ctx.strokeStyle = '#fff8';
+  ctx.lineWidth = 2;
+  [[200,238],[150,188],[200,138],[250,188]].forEach(([x,y],i,a) => {
+    const n = a[(i+1)%4];
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(n[0],n[1]); ctx.stroke();
+  });
+  // Bases (colored by state)
+  const basePos = [[250,188],[200,138],[150,188]]; // 1st,2nd,3rd
+  basePos.forEach(([x,y], i) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI/4);
+    ctx.fillStyle = state.bases[i] ? '#f59e0b' : 'white';
+    ctx.fillRect(-12,-12,24,24);
+    ctx.restore();
+  });
+  // Batter
+  ctx.fillStyle = '#60a5fa';
+  ctx.beginPath();
+  ctx.arc(215, 250, 8, 0, 2*Math.PI);
+  ctx.fill();
+  // Pitcher
+  ctx.fillStyle = '#f87171';
+  ctx.beginPath();
+  ctx.arc(200, 175, 7, 0, 2*Math.PI);
+  ctx.fill();
+}
+
+function updateCountUI() {
+  for (let i = 0; i < 3; i++) document.getElementById('b'+i).className = 'dot' + (i < state.balls ? ' on' : '');
+  for (let i = 0; i < 2; i++) document.getElementById('s'+i).className = 'dot' + (i < state.strikes ? ' on' : '');
+  for (let i = 0; i < 2; i++) document.getElementById('o'+i).className = 'dot' + (i < state.outs ? ' on' : '');
+  document.getElementById('scorePlayer').textContent = state.scorePlayer;
+  document.getElementById('scoreCpu').textContent = state.scoreCpu;
+  const half = state.isTop ? '表（あなた攻撃）' : '裏（CPU攻撃）';
+  document.getElementById('inningLabel').textContent = state.inning + '回' + half;
+}
+
+// Power bar animation
+function startPowerBar() {
+  const bar = document.getElementById('powerBar');
+  const speed = 1.5 + Math.random();
+  function tick() {
+    state.power += state.powerDir * speed;
+    if (state.power >= 100) { state.power = 100; state.powerDir = -1; }
+    if (state.power <= 0) { state.power = 0; state.powerDir = 1; }
+    bar.style.width = state.power + '%';
+    animFrame = requestAnimationFrame(tick);
+  }
+  animFrame = requestAnimationFrame(tick);
+}
+
+function stopPowerBar() {
+  cancelAnimationFrame(animFrame);
+}
+
+// Pick pitch type
+function pickPitch() {
+  const types = ['straight','curve','slider','changeup'];
+  return types[Math.floor(Math.random() * types.length)];
+}
+
+// Determine zone (strike zone hit probability by pitch type)
+function pitchInZone(pitchType) {
+  const zoneChance = { straight: 0.6, curve: 0.5, slider: 0.45, changeup: 0.55 };
+  return Math.random() < zoneChance[pitchType];
+}
+
+const pitchNames = { straight: 'ストレート', curve: 'カーブ', slider: 'スライダー', changeup: 'チェンジアップ' };
+
+function setMessage(text, cls) {
+  const el = document.getElementById('message');
+  el.textContent = text;
+  el.className = 'message ' + (cls || '');
+}
+
+// Pitch visual config per type
+const pitchVisual = {
+  straight:  { color: '#ffffff', shadow: '#aaa',    steps: 22, curve: 0,    drift: 0    },
+  curve:     { color: '#60a5fa', shadow: '#1d4ed8', steps: 38, curve: 40,   drift: 0    },
+  slider:    { color: '#f87171', shadow: '#b91c1c', steps: 30, curve: 0,    drift: 30   },
+  changeup:  { color: '#4ade80', shadow: '#15803d', steps: 48, curve: 15,   drift: -10  },
+};
+
+function animatePitch(pitchType, cb) {
+  const ball = document.getElementById('ball-anim');
+  const label = document.getElementById('pitch-label');
+  const v = pitchVisual[pitchType] || pitchVisual.straight;
+
+  // Style ball
+  ball.style.background = v.color;
+  ball.style.boxShadow = '0 0 8px 3px ' + v.shadow;
+  ball.style.display = 'block';
+
+  // Show pitch label
+  const colors = { straight:'#fff,#333', curve:'#60a5fa,#1e3a5f', slider:'#f87171,#5f1e1e', changeup:'#4ade80,#1a4d2e' };
+  const [fg, bg] = colors[pitchType].split(',');
+  label.style.color = fg;
+  label.style.background = bg;
+  label.style.opacity = '1';
+  label.textContent = pitchNames[pitchType];
+
+  const fromX = 200, fromY = 175, toX = 200, toY = 248;
+  const steps = v.steps;
+  let step = 0;
+
+  function tick() {
+    step++;
+    const t = step / steps;
+    // Easing: straight=linear, curve=ease-in, changeup=slow-start-slow-end
+    let eased = t;
+    if (pitchType === 'curve') eased = t * t;
+    if (pitchType === 'changeup') eased = t < 0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+
+    const x = fromX + (toX - fromX) * eased + Math.sin(t * Math.PI) * v.drift;
+    const y = fromY + (toY - fromY) * eased + Math.sin(t * Math.PI) * v.curve;
+
+    ball.style.left = (x - 11) + 'px';
+    ball.style.top  = (y - 11) + 'px';
+
+    if (step < steps) requestAnimationFrame(tick);
+    else {
+      ball.style.display = 'none';
+      label.style.opacity = '0';
+      if (cb) cb();
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function animateBall(fromX, fromY, toX, toY, cb) {
+  const ball = document.getElementById('ball-anim');
+  ball.style.background = '#ffffff';
+  ball.style.boxShadow = '0 0 6px 2px #aaa';
+  ball.style.display = 'block';
+  const steps = 20;
+  let step = 0;
+  function tick() {
+    step++;
+    const t = step / steps;
+    ball.style.left = (fromX + (toX - fromX) * t - 11) + 'px';
+    ball.style.top  = (fromY + (toY - fromY) * t - 11) + 'px';
+    if (step < steps) requestAnimationFrame(tick);
+    else { ball.style.display = 'none'; if (cb) cb(); }
+  }
+  requestAnimationFrame(tick);
+}
+
+// CPU half-inning: simulate CPU at bat
+function simulateCpuInning() {
+  // CPU batting: random simulation
+  let cpuOuts = 0, cpuRuns = 0, cpuBases = [false,false,false];
+  while (cpuOuts < 3) {
+    const r = Math.random();
+    if (r < 0.07) { // HR
+      cpuRuns += 1 + cpuBases.filter(Boolean).length;
+      cpuBases = [false,false,false];
+    } else if (r < 0.18) { // hit
+      cpuBases = advanceBases(cpuBases, 1);
+      if (cpuBases[3]) { cpuRuns++; cpuBases[3] = false; }
+    } else if (r < 0.23) { // walk
+      cpuBases = advanceBases(cpuBases, 1);
+      if (cpuBases[3]) { cpuRuns++; cpuBases[3] = false; }
+    } else {
+      cpuOuts++;
+    }
+  }
+  return cpuRuns;
+}
+
+function advanceBases(bases, steps) {
+  let b = [...bases, false]; // add home as index 3
+  for (let s = 0; s < steps; s++) {
+    b = [true, b[0], b[1], b[2] || b[3]];
+  }
+  return b;
+}
+
+function swing() {
+  if (state.phase !== 'pitching' || state.gameOver) return;
+  stopPowerBar();
+  state.phase = 'result';
+  document.getElementById('btnHit').disabled = true;
+
+  const power = state.power; // 0-100
+  const pitchType = state.pitchType;
+  const inZone = pitchInZone(pitchType);
+
+  // Hit quality based on power timing (sweet spot ~60-80)
+  const sweet = Math.abs(power - 70);
+  const hitChance = inZone ? Math.max(0.05, 0.75 - sweet * 0.015) : Math.max(0, 0.3 - sweet * 0.01);
+
+  const r = Math.random();
+  let result;
+  if (r < hitChance * 0.1) result = 'homerun';
+  else if (r < hitChance * 0.3) result = 'triple';
+  else if (r < hitChance * 0.55) result = 'double';
+  else if (r < hitChance) result = 'single';
+  else if (!inZone) result = 'ball';
+  else result = state.strikes >= 1 ? 'strikeout_swing' : 'strike';
+
+  // Animate ball pitch with pitch-type visuals
+  animatePitch(pitchType, () => applyResult(result, power));
+}
+
+function applyResult(result, power) {
+  drawField();
+  if (result === 'ball') {
+    state.balls++;
+    setMessage('ボール！ (パワー:' + Math.round(power) + ')', 'ball');
+    if (state.balls >= 4) {
+      setMessage('フォアボール！一塁へ', 'hit');
+      advanceRunners(1);
+      resetCount();
+    }
+  } else if (result === 'strike' || result === 'strikeout_swing') {
+    state.strikes++;
+    if (state.strikes >= 3) {
+      setMessage('三振！アウト！', 'out');
+      addOut();
+    } else {
+      setMessage('ストライク！ (パワー:' + Math.round(power) + ')', 'strike');
+    }
+  } else if (result === 'single') {
+    setMessage('ヒット！シングル！', 'hit');
+    advanceRunners(1); resetCount();
+    animateBall(200, 248, 350, 100, () => {});
+  } else if (result === 'double') {
+    setMessage('ツーベースヒット！', 'hit');
+    advanceRunners(2); resetCount();
+  } else if (result === 'triple') {
+    setMessage('スリーベースヒット！', 'hit');
+    advanceRunners(3); resetCount();
+  } else if (result === 'homerun') {
+    const runs = 1 + state.bases.filter(Boolean).length;
+    setMessage('ホームラン！ ' + runs + '点入った！🎉', 'hit');
+    state.scorePlayer += runs;
+    state.bases = [false,false,false];
+    resetCount();
+  }
+
+  drawField();
+  updateCountUI();
+
+  const btnNext = document.getElementById('btnNext');
+  if (!state.gameOver) {
+    btnNext.style.display = 'inline-block';
+    btnNext.textContent = state.phase === 'result' ? '次の投球 ▶' : '次の投球 ▶';
+  }
+}
+
+function advanceRunners(bases) {
+  let b = [...state.bases, false];
+  for (let i = 0; i < bases; i++) {
+    b = [true, b[0], b[1], b[2] || b[3]];
+  }
+  if (b[3]) state.scorePlayer++; // run scored
+  state.bases = [b[0], b[1], b[2]];
+}
+
+function addOut() {
+  state.outs++;
+  state.balls = 0; state.strikes = 0;
+  if (state.outs >= 3) {
+    endHalf();
+  }
+}
+
+function resetCount() {
+  state.balls = 0; state.strikes = 0;
+}
+
+function endHalf() {
+  if (state.isTop) {
+    // Switch to CPU batting
+    state.isTop = false;
+    state.outs = 0; state.balls = 0; state.strikes = 0;
+    state.bases = [false,false,false];
+    const cpuRuns = simulateCpuInning();
+    state.scoreCpu += cpuRuns;
+    const msg = cpuRuns > 0 ? 'CPUが' + cpuRuns + '点入れた！' : 'CPUは無得点！';
+    setMessage(msg + ' → 次の回へ', cpuRuns > 0 ? 'out' : 'hit');
+    state.inning++;
+    if (state.inning > TOTAL_INNINGS) {
+      endGame();
+      return;
+    }
+    state.isTop = true;
+    state.outs = 0;
+    updateCountUI();
+    document.getElementById('btnNext').style.display = 'inline-block';
+    document.getElementById('btnNext').textContent = '次の回へ ▶';
+  }
+}
+
+function endGame() {
+  state.gameOver = true;
+  document.getElementById('btnNext').style.display = 'none';
+  document.getElementById('btnHit').style.display = 'none';
+  let msg;
+  if (state.scorePlayer > state.scoreCpu) msg = 'あなたの勝ち！🎉 ' + state.scorePlayer + '-' + state.scoreCpu;
+  else if (state.scoreCpu > state.scorePlayer) msg = 'CPUの勝ち…😢 ' + state.scorePlayer + '-' + state.scoreCpu;
+  else msg = '引き分け！' + state.scorePlayer + '-' + state.scoreCpu;
+  setMessage('ゲーム終了！ ' + msg, state.scorePlayer >= state.scoreCpu ? 'hit' : 'out');
+  updateCountUI();
+}
+
+function nextPitch() {
+  if (state.gameOver) return;
+  document.getElementById('btnNext').style.display = 'none';
+  document.getElementById('btnHit').disabled = false;
+  state.phase = 'pitching';
+  state.power = 0;
+  state.powerDir = 1;
+  state.pitchType = pickPitch();
+  setMessage(pitchNames[state.pitchType] + ' が来るぞ！タイミングを合わせろ！');
+  document.getElementById('powerBar').style.width = '0%';
+  startPowerBar();
+  drawField();
+  updateCountUI();
+}
+
+function resetGame() {
+  cancelAnimationFrame(animFrame);
+  state = {
+    inning: 1, isTop: true,
+    balls: 0, strikes: 0, outs: 0,
+    bases: [false,false,false],
+    scorePlayer: 0, scoreCpu: 0,
+    phase: 'pitching',
+    powerDir: 1, power: 0,
+    pitchType: '', gameOver: false
+  };
+  document.getElementById('btnHit').disabled = false;
+  document.getElementById('btnHit').style.display = 'inline-block';
+  document.getElementById('btnNext').style.display = 'none';
+  document.getElementById('powerBar').style.width = '0%';
+  setMessage('「打て！」を押してバッティング！');
+  drawField();
+  updateCountUI();
+  nextPitch();
+}
+
+// Init
+drawField();
+updateCountUI();
+nextPitch();
+</script>
+</body>
+</html>
