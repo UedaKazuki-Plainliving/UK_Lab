@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>上田家バトル</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
   body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; overflow: hidden; }
   #wrap { position: relative; width: 100vw; }
-  canvas { display: block; width: 100vw; height: auto; touch-action: none; }
+  canvas { display: block; width: 100vw; height: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
   #nav-ctrls {
     display: flex; justify-content: center; align-items: center; gap: 24px;
     padding: 10px 0; background: #111; width: 100%;
@@ -110,7 +110,7 @@ function bindHold(el, code) {
 }
 function bindTap(el, code) {
   el.addEventListener('pointerdown', e => { e.preventDefault(); keys[code] = true; });
-  el.addEventListener('pointerup',   e => { e.preventDefault(); });
+  el.addEventListener('pointerup',   e => { e.preventDefault(); keys[code] = false; });
 }
 
 bindHold(document.getElementById('btn-left'),    'KeyA');
@@ -125,6 +125,15 @@ bindTap(document.getElementById('nav-left'),  'ArrowLeft');
 bindTap(document.getElementById('nav-right'), 'ArrowRight');
 bindTap(document.getElementById('nav-ok'),    'Enter');
 
+// Prevent iOS double-tap zoom on the entire UI
+document.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, {passive: false});
+let _lastTap = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - _lastTap < 300) e.preventDefault();
+  _lastTap = now;
+}, {passive: false});
+
 // Canvas tap handler for charselect & intro
 canvas.addEventListener('pointerdown', e => {
   if (audio.state === 'suspended') audio.resume();
@@ -136,7 +145,12 @@ canvas.addEventListener('pointerdown', e => {
     const PW=136, GAP=20, startX=20;
     for (let idx=0; idx<CHAR_LIST.length; idx++) {
       const px = startX + idx*(PW+GAP);
-      if (tx >= px && tx <= px+PW) { selectedCharIdx = idx; keys['Enter'] = true; break; }
+      if (tx >= px && tx <= px+PW) {
+        if (selectStep===0) selectedCharIdx=idx;
+        else cpuCharIdx=idx;
+        beep(350,'sine',0.08);
+        break;
+      }
     }
   }
 });
@@ -962,18 +976,22 @@ function drawIntro() {
 function drawCharSelect() {
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
   ctx.font='bold 28px sans-serif'; ctx.textAlign='center';
-  ctx.fillStyle='#ffdd00'; ctx.fillText('キャラクター選択',W/2,38);
+  ctx.fillStyle='#ffdd00';
+  ctx.fillText(selectStep===0?'あなたのキャラを選択':'対戦相手を選択',W/2,38);
   ctx.font='13px sans-serif'; ctx.fillStyle='#888';
-  ctx.fillText('タップして選択 / 決定で開始',W/2,62);
+  ctx.fillText('タップして選択 / 決定で確定',W/2,62);
 
   const PW=136, PH=272, GAP=20, startX=20;
   CHAR_LIST.forEach((def,idx)=>{
     const px=startX+idx*(PW+GAP);
-    const selected=idx===selectedCharIdx;
+    const isP1=idx===selectedCharIdx;
+    const isCPU=idx===cpuCharIdx;
+    const cursor=selectStep===0?isP1:isCPU;
+    const locked=selectStep===1&&isP1;
     const blink=Math.floor(Date.now()/300)%2;
-    ctx.strokeStyle=selected?(blink?'#ffdd00':'#ff8800'):'#444';
-    ctx.lineWidth=selected?3:1.5;
-    ctx.fillStyle=selected?'rgba(255,200,0,0.07)':'rgba(255,255,255,0.02)';
+    ctx.strokeStyle=cursor?(blink?'#ffdd00':'#ff8800'):locked?'#00ccee':'#444';
+    ctx.lineWidth=cursor?3:locked?2:1.5;
+    ctx.fillStyle=cursor?'rgba(255,200,0,0.07)':locked?'rgba(0,180,255,0.05)':'rgba(255,255,255,0.02)';
     ctx.fillRect(px,78,PW,PH); ctx.strokeRect(px,78,PW,PH);
 
     ctx.save(); ctx.translate(px+PW/2,240);
@@ -991,9 +1009,15 @@ function drawCharSelect() {
     ctx.fillText('💥'+def.specialName,px+PW/2,320);
     ctx.font='10px sans-serif'; ctx.fillStyle='#888';
     def.flavor.forEach((line,li)=>ctx.fillText(line,px+PW/2,334+li*13));
-    ctx.font='bold 12px sans-serif';
-    ctx.fillStyle=selected?'#ffdd00':'#555';
-    ctx.fillText(selected?'▶ あなた':'CPU',px+PW/2,93);
+    ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+    if (selectStep===0) {
+      ctx.fillStyle=isP1?'#ffdd00':'#555';
+      ctx.fillText(isP1?'▶ あなた':'',px+PW/2,93);
+    } else {
+      if (locked){ctx.fillStyle='#00ccee';ctx.fillText('✓ あなた',px+PW/2,93);}
+      else if (isCPU){ctx.fillStyle='#ffdd00';ctx.fillText('▶ CPU',px+PW/2,93);}
+      else {ctx.fillStyle='#555';ctx.fillText('',px+PW/2,93);}
+    }
   });
 
   ctx.font='bold 36px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ff4444';
@@ -1006,14 +1030,13 @@ let p1,p2,cpuCtrl;
 let timerSec=99, timerTick=0;
 let wins=[0,0], roundNum=1;
 let flash={msg:'',t:0};
-let endTimer=0, selectedCharIdx=0;
+let endTimer=0, selectedCharIdx=0, cpuCharIdx=1, selectStep=0;
 function showFlash(msg,dur){flash.msg=msg;flash.t=dur;}
 
 function startRound() {
   const p1def=CHAR_LIST[selectedCharIdx];
-  let cpuIdx=(selectedCharIdx+1)%CHAR_LIST.length;
   p1=new Fighter(200,true,p1def);
-  p2=new Fighter(600,false,CHAR_LIST[cpuIdx]);
+  p2=new Fighter(600,false,CHAR_LIST[cpuCharIdx]);
   cpuCtrl=new CPU(p2,p1);
   projectiles.length=0; wordProjs.length=0;
   hurdleAttack=null; activeGorilla=null;
@@ -1043,14 +1066,27 @@ function loop() {
   }
   if (phase==='charselect') {
     drawCharSelect();
-    if (keyOnce('ArrowLeft')||keyOnce('KeyA')){selectedCharIdx=(selectedCharIdx-1+CHAR_LIST.length)%CHAR_LIST.length;beep(350,'sine',0.08);}
-    if (keyOnce('ArrowRight')||keyOnce('KeyD')){selectedCharIdx=(selectedCharIdx+1)%CHAR_LIST.length;beep(350,'sine',0.08);}
+    if (keyOnce('ArrowLeft')||keyOnce('KeyA')) {
+      if (selectStep===0) selectedCharIdx=(selectedCharIdx-1+CHAR_LIST.length)%CHAR_LIST.length;
+      else cpuCharIdx=(cpuCharIdx-1+CHAR_LIST.length)%CHAR_LIST.length;
+      beep(350,'sine',0.08);
+    }
+    if (keyOnce('ArrowRight')||keyOnce('KeyD')) {
+      if (selectStep===0) selectedCharIdx=(selectedCharIdx+1)%CHAR_LIST.length;
+      else cpuCharIdx=(cpuCharIdx+1)%CHAR_LIST.length;
+      beep(350,'sine',0.08);
+    }
     if (keyOnce('Space')||keyOnce('Enter')||keyOnce('KeyJ')) {
-      wins=[0,0];roundNum=1;startRound();phase='countdown';
-      showFlash(`ROUND ${roundNum}`,80);
-      setTimeout(()=>showFlash('FIGHT!',70),1200);
-      setTimeout(()=>{phase='fight';},1800);
-      beep(523,'sine',0.3,0.4);
+      if (selectStep===0) {
+        selectStep=1; cpuCharIdx=(selectedCharIdx+1)%CHAR_LIST.length;
+        beep(440,'sine',0.12);
+      } else {
+        wins=[0,0];roundNum=1;startRound();phase='countdown';
+        showFlash(`ROUND ${roundNum}`,80);
+        setTimeout(()=>showFlash('FIGHT!',70),1200);
+        setTimeout(()=>{phase='fight';},1800);
+        beep(523,'sine',0.3,0.4);
+      }
     }
     return;
   }
@@ -1110,7 +1146,7 @@ function loop() {
 
   if (phase==='roundend'||phase==='countdown') {
     if (phase==='roundend'&&--endTimer<=0) {
-      if (wins[0]>=2||wins[1]>=2){wins=[0,0];roundNum=1;phase='charselect';return;}
+      if (wins[0]>=2||wins[1]>=2){wins=[0,0];roundNum=1;selectStep=0;phase='charselect';return;}
       roundNum++;startRound();phase='countdown';
       showFlash(`ROUND ${roundNum}`,80);
       setTimeout(()=>showFlash('FIGHT!',70),1200);
