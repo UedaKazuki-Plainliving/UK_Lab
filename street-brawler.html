@@ -226,7 +226,7 @@ function updateProjectiles(p1,p2) {
     const hurt=target.hurtbox();
     const px=proj.vx>0?proj.x-5:proj.x-65;
     if (px<hurt.x+hurt.w&&px+70>hurt.x&&proj.y-20<hurt.y+hurt.h&&proj.y+20>hurt.y) {
-      if (target.takeHit({dmg:proj.dmg,stun:proj.stun,push:proj.push},proj.vx>0?1:-1)) {
+      if (target.takeHit({dmg:proj.dmg,stun:proj.stun,push:proj.push,type:'special'},proj.vx>0?1:-1)) {
         proj.owner.specialGauge=Math.min(proj.owner.maxSpecialGauge,proj.owner.specialGauge+20);
         spawnHit(target.x,target.y-70);
         projectiles.splice(i,1);
@@ -307,7 +307,7 @@ function updateHurdles(p1,p2) {
         const key=`${i}-${fi}`; if (hurdleAttack.hit.has(key)) return;
         const hurt=f.hurtbox();
         if (px-38<hurt.x+hurt.w&&px+38>hurt.x&&hurdleAttack.ys[i]<hurt.y+hurt.h&&hurdleAttack.ys[i]+20>hurt.y) {
-          if (f.takeHit({dmg:10,stun:16,push:10},px<f.x?-1:1)) {
+          if (f.takeHit({dmg:10,stun:16,push:10,type:'special'},px<f.x?-1:1)) {
             hurdleAttack.hit.add(key); spawnHit(f.x,f.y-50);
             hurdleAttack.owner.specialGauge=Math.min(hurdleAttack.owner.maxSpecialGauge,hurdleAttack.owner.specialGauge+10);
           }
@@ -353,7 +353,7 @@ function updateWords(p1,p2) {
       if (target.hp<=0||target.hitStun>0) continue;
       const hurt=target.hurtbox();
       if (w.x>hurt.x&&w.x<hurt.x+hurt.w&&w.y>hurt.y&&w.y<hurt.y+hurt.h) {
-        if (target.takeHit({dmg:6,stun:14,push:8},w.vx>0?1:-1)) {
+        if (target.takeHit({dmg:6,stun:14,push:8,type:'special'},w.vx>0?1:-1)) {
           w.hit=true; w.owner.specialGauge=Math.min(w.owner.maxSpecialGauge,w.owner.specialGauge+5);
           spawnHit(target.x,target.y-50);
         }
@@ -461,6 +461,7 @@ class Fighter {
   }
   hurtbox() {
     const s=this.def.scale;
+    if (this.state==='crouch') return {x:this.x-24*s,y:this.y-82*s,w:48*s,h:82*s};
     return {x:this.x-28*s,y:this.y-125*s,w:56*s,h:125*s};
   }
   hitbox() {
@@ -472,28 +473,39 @@ class Fighter {
     if (this.state==='kick'&&this.st>=def.kickS&&this.st<=def.kickE)
       return {x:this.x+d*14*s,y:this.y-62*s,w:d*88*s*rb,h:32*s};
     if (this.state==='jatk'&&this.st>=def.jatkS&&this.st<=def.jatkE)
-      return {x:this.x+d*14*s,y:this.y-82*s,w:d*52*s*rb,h:40*s};
+      return {x:this.x-22*s,y:this.y-150*s,w:44*s,h:48*s};
+    if (this.state==='jkick'&&this.st>=def.kickS&&this.st<=def.kickE)
+      return {x:this.x-22*s,y:this.y-65*s,w:44*s,h:65*s};
     return null;
   }
   damageInfo() {
     const def=this.def;
-    if (this.state==='special'&&def.id==='yuuri') return {dmg:35,stun:42,push:60};
-    if (this.state==='punch') return {dmg:def.punchDmg,stun:def.hitStunGiven,push:def.pushback};
-    if (this.state==='kick')  return {dmg:def.kickDmg, stun:def.hitStunGiven,push:def.pushback};
-    if (this.state==='jatk')  return {dmg:def.jatkDmg, stun:def.hitStunGiven,push:def.pushback};
+    if (this.state==='special'&&def.id==='yuuri') return {dmg:35,stun:42,push:60,type:'special'};
+    if (this.state==='punch') return {dmg:def.punchDmg,stun:def.hitStunGiven,push:def.pushback,type:'punch'};
+    if (this.state==='kick')  return {dmg:def.kickDmg, stun:def.hitStunGiven,push:def.pushback,type:'kick'};
+    if (this.state==='jatk')  return {dmg:def.jatkDmg, stun:def.hitStunGiven,push:def.pushback,type:'jatk'};
+    if (this.state==='jkick') return {dmg:def.kickDmg, stun:def.hitStunGiven,push:def.pushback,type:'jkick'};
     return null;
   }
   takeHit(info,fromDir) {
     if (this.hitStun>0||this.state==='dead') return false;
-    const blocking=this.state==='block'&&this.dir!==fromDir;
+    const type=info.type||'normal';
+    const facing=this.dir!==fromDir;
+    const standG=this.state==='block'&&facing;
+    const crouchG=this.state==='crouch'&&facing;
     this.specialGauge=Math.min(this.maxSpecialGauge,this.specialGauge+8);
-    if (blocking) {
-      this.hp-=Math.max(1,Math.floor(info.dmg*0.1));
-      this.blockStun=14; beep(180,'square',0.08,0.2);
-    } else {
-      this.hp-=info.dmg; this.hitStun=info.stun;
-      this.state='hurt'; this.st=0; this.x+=fromDir*info.push;
+    // 立ちガード→パンチ/空中パンチ無効、しゃがみガード→キック/空中キック無効
+    if ((standG&&(type==='punch'||type==='jatk'))||(crouchG&&(type==='kick'||type==='jkick'))) {
+      this.blockStun=18; beep(180,'square',0.1,0.2); return true;
     }
+    // どちらのガードでも必殺技はダメージ軽減
+    if ((standG||crouchG)&&type==='special') {
+      this.hp-=Math.max(1,Math.floor(info.dmg*0.4));
+      this.blockStun=10; beep(220,'square',0.07,0.15);
+      if (this.hp<=0){this.hp=0;this.state='dead';} return true;
+    }
+    this.hp-=info.dmg; this.hitStun=info.stun;
+    this.state='hurt'; this.st=0; this.x+=fromDir*info.push;
     if (this.hp<=0){this.hp=0;this.state='dead';}
     return true;
   }
@@ -528,13 +540,13 @@ class Fighter {
       if (this.y>=GROUND){this.y=GROUND;this.vy=0;this.onGround=true;
         if (this.state==='jump'||this.state==='jatk'){this.state='idle';this.st=0;}}
     }
-    const atk=['punch','kick','jatk'].includes(this.state);
+    const atk=['punch','kick','jatk','jkick'].includes(this.state);
     if (this.hitStun===0&&!atk) this.dir=opp.x>this.x?1:-1;
     if (this.hitStun>0) return;
 
     if (atk) {
       const def=this.def;
-      const dur=this.state==='punch'?def.punchDur:this.state==='kick'?def.kickDur:def.jatkDur;
+      const dur=this.state==='punch'?def.punchDur:(this.state==='kick'||this.state==='jkick')?def.kickDur:def.jatkDur;
       // Baseball fire signal
       if (this.state==='punch'&&def.punchIsProjectile&&this.st===def.punchS&&!this.punchFired) this.punchFired=true;
       if (this.st>=dur){this.state='idle';this.st=0;this.atkHit=false;}
@@ -556,11 +568,12 @@ class Fighter {
     else if (ok&&inp.punch&&this.onGround){this.state='punch';this.st=0;this.atkHit=false;this.punchFired=false;beep(500,'sawtooth',0.07,0.09);}
     else if (ok&&inp.kick&&this.onGround){this.state='kick';this.st=0;this.atkHit=false;beep(120,'square',0.12,0.15);}
     else if (ok&&inp.punch&&!this.onGround){this.state='jatk';this.st=0;this.atkHit=false;beep(400,'triangle',0.06,0.09);}
+    else if (ok&&inp.kick&&!this.onGround&&this.state!=='jkick'){this.state='jkick';this.st=0;this.atkHit=false;beep(120,'square',0.1,0.13);}
     else if (ok&&inp.up&&this.onGround){
       this.vy=this.def.jumpVel;this.onGround=false;this.state='jump';this.st=0;
       beep(440,'sine',0.1,0.12);
-      if (inp.left) this.x-=this.def.walkSpd*0.5;
-      if (inp.right) this.x+=this.def.walkSpd*0.5;
+      if (inp.left) this.x-=this.def.walkSpd*1.4;
+      if (inp.right) this.x+=this.def.walkSpd*1.4;
     }
     else if (inp.down&&this.onGround){this.state='crouch';}
     else if (inp.left&&this.onGround){this.x-=this.def.walkSpd;this.state='walk';}
@@ -568,9 +581,9 @@ class Fighter {
     else if (this.onGround&&this.state!=='block'){this.state='idle';}
 
     // Air horizontal movement (diagonal jump)
-    if (!this.onGround&&(this.state==='jump'||this.state==='jatk'||this.state==='hurt')) {
-      if (inp.left)  this.x-=this.def.walkSpd*0.6;
-      if (inp.right) this.x+=this.def.walkSpd*0.6;
+    if (!this.onGround&&(this.state==='jump'||this.state==='jatk'||this.state==='jkick'||this.state==='hurt')) {
+      if (inp.left)  this.x-=this.def.walkSpd*0.9;
+      if (inp.right) this.x+=this.def.walkSpd*0.9;
     }
 
     this.x=Math.max(55,Math.min(W-55,this.x));
@@ -632,11 +645,12 @@ class Fighter {
   _shape() {
     const s=this.state,def=this.def,c1=def.c1,c2=def.c2;
     const bw=def.bodyW,lw=def.limbW;
-    const cr=s==='crouch'?28:s==='hurt'?10:0;
+    const cr=s==='crouch'?38:s==='hurt'?10:0;
     const swing=s==='walk'?Math.sin(this.af*Math.PI)*14:0;
     const punchOn=s==='punch'&&this.st>=def.punchS&&this.st<=def.punchE&&!def.punchIsProjectile;
+    const jatkOn=s==='jatk'&&this.st>=def.jatkS&&this.st<=def.jatkE;
     const kickOn=(s==='kick'&&this.st>=def.kickS&&this.st<=def.kickE)||
-                 (s==='jatk'&&this.st>=def.jatkS&&this.st<=def.jatkE);
+                 (s==='jkick'&&this.st>=def.kickS&&this.st<=def.kickE);
     const base=-cr;
     const isSpecial=s==='special';
     const chargeRaise=isSpecial?Math.min(1,this.st/10):0;
@@ -650,20 +664,32 @@ class Fighter {
       ctx.beginPath(); ctx.moveTo(0,base-18); ctx.lineTo(-10,base-40+cr); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0,base-18); ctx.lineTo(52,base-36+cr); ctx.stroke();
     } else {
-      const ls=s==='jump'||s==='jatk'?12:Math.abs(swing)*0.6;
+      const ls=s==='jump'||s==='jatk'||s==='jkick'?12:Math.abs(swing)*0.6;
       ctx.beginPath(); ctx.moveTo(0,base-18); ctx.lineTo(-10-ls,base-42+cr*0.5); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0,base-18); ctx.lineTo(10+ls,base-42+cr*0.5); ctx.stroke();
-    }
-
-    // おとうさんのまるっこいお腹
-    if (def.id==='otousan') {
-      ctx.fillStyle=c2;
-      ctx.beginPath(); ctx.ellipse(0,base-48+cr,24,22,0,0,Math.PI*2); ctx.fill();
     }
 
     // Body
     ctx.fillStyle=c1; ctx.fillRect(-bw/2,base-84+cr,bw,48);
     ctx.fillStyle=c2; ctx.fillRect(-bw/2,base-44+cr,bw,8);
+    // おとうさん: スーツ+ネクタイ
+    if (def.id==='otousan') {
+      ctx.fillStyle='#223355'; ctx.fillRect(-bw/2,base-84+cr,bw,48); // スーツ上着
+      ctx.fillStyle='#ffffff'; ctx.fillRect(-4,base-82+cr,8,38); // シャツ
+      ctx.fillStyle=c2; ctx.fillRect(-bw/2,base-44+cr,bw,8); // ベルト再描画
+      ctx.fillStyle='#cc2211'; // ネクタイ
+      ctx.beginPath(); ctx.moveTo(-3,base-80+cr); ctx.lineTo(3,base-80+cr);
+      ctx.lineTo(5,base-57+cr); ctx.lineTo(8,base-44+cr);
+      ctx.lineTo(0,base-36+cr); ctx.lineTo(-8,base-44+cr); ctx.lineTo(-5,base-57+cr);
+      ctx.closePath(); ctx.fill();
+    }
+    // ゆうり: スポーツジャージ
+    if (def.id==='yuuri') {
+      ctx.fillStyle='rgba(255,255,255,0.2)';
+      ctx.fillRect(-bw/2+2,base-82+cr,5,44); ctx.fillRect(bw/2-7,base-82+cr,5,44);
+      ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('7',0,base-58+cr);
+    }
 
     // Arms
     ctx.lineWidth=lw; ctx.strokeStyle=c1;
@@ -690,6 +716,11 @@ class Fighter {
         ctx.beginPath(); ctx.arc(-bw/2-18,base-95-raise+cr,5*chargeRaise,0,Math.PI*2); ctx.fill();
         ctx.shadowBlur=0; ctx.globalAlpha=1;
       }
+    } else if (jatkOn) {
+      // 空中上パンチ
+      ctx.beginPath(); ctx.moveTo(bw/2-4,base-78+cr); ctx.lineTo(bw/2+8,base-100+cr); ctx.stroke();
+      ctx.fillStyle='#FFCC99'; ctx.beginPath(); ctx.arc(bw/2+8,base-100+cr,lw*0.75,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-bw/2+4,base-78+cr); ctx.lineTo(-bw/2-6,base-97+cr); ctx.stroke();
     } else {
       ctx.beginPath(); ctx.moveTo(bw/2-4,base-78+cr); ctx.lineTo(bw/2+12,base-58+cr+swing); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-bw/2+4,base-78+cr); ctx.lineTo(-bw/2-12,base-58+cr-swing); ctx.stroke();
@@ -975,8 +1006,6 @@ function drawCharSelect() {
     }
   });
 
-  ctx.font='bold 36px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ff4444';
-  ctx.fillText('VS',W/2,260);
 }
 
 // ---- Game State ----
@@ -1077,7 +1106,7 @@ function loop() {
           const hurt=gt.hurtbox();
           const ghx=ghb.w<0?ghb.x+ghb.w:ghb.x, ghw=Math.abs(ghb.w);
           if (ghx<hurt.x+hurt.w&&ghx+ghw>hurt.x&&ghb.y<hurt.y+hurt.h&&ghb.y+ghb.h>hurt.y) {
-            if (gt.takeHit({dmg:12,stun:20,push:18},activeGorilla.dir)) {
+            if (gt.takeHit({dmg:12,stun:20,push:18,type:'special'},activeGorilla.dir)) {
               activeGorilla.atkHit=true;
               spawnHit((activeGorilla.x+gt.x)/2,gt.y-50);
             }
