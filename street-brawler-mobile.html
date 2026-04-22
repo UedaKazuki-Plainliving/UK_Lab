@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>上田家バトル</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
+  * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; -webkit-user-select: none; user-select: none; }
   body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; overflow: hidden; }
   #wrap { position: relative; width: 100vw; }
   canvas { display: block; width: 100vw; height: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
@@ -101,16 +101,25 @@ document.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefaul
 document.addEventListener('keyup',   e => { keys[e.code] = false; });
 function keyOnce(code) { if (keys[code]) { keys[code] = false; return true; } return false; }
 
-// Touch binding helpers
+// Touch binding helpers — use both touch and pointer events for reliability
 function bindHold(el, code) {
-  el.addEventListener('pointerdown', e => { e.preventDefault(); keys[code] = true; el.classList.add('active'); });
-  el.addEventListener('pointerup',   e => { e.preventDefault(); keys[code] = false; el.classList.remove('active'); });
-  el.addEventListener('pointercancel', e => { keys[code] = false; el.classList.remove('active'); });
-  el.addEventListener('pointerleave', e => { keys[code] = false; el.classList.remove('active'); });
+  const on  = e => { e.preventDefault(); keys[code] = true;  el.classList.add('active'); };
+  const off = e => { e.preventDefault(); keys[code] = false; el.classList.remove('active'); };
+  el.addEventListener('pointerdown',   on,  {passive: false});
+  el.addEventListener('pointerup',     off, {passive: false});
+  el.addEventListener('pointercancel', off, {passive: false});
+  el.addEventListener('pointerleave',  off, {passive: false});
+  el.addEventListener('touchstart',    on,  {passive: false});
+  el.addEventListener('touchend',      off, {passive: false});
+  el.addEventListener('touchcancel',   off, {passive: false});
 }
 function bindTap(el, code) {
-  el.addEventListener('pointerdown', e => { e.preventDefault(); keys[code] = true; });
-  el.addEventListener('pointerup',   e => { e.preventDefault(); keys[code] = false; });
+  const on  = e => { e.preventDefault(); keys[code] = true; };
+  const off = e => { e.preventDefault(); keys[code] = false; };
+  el.addEventListener('pointerdown', on,  {passive: false});
+  el.addEventListener('pointerup',   off, {passive: false});
+  el.addEventListener('touchstart',  on,  {passive: false});
+  el.addEventListener('touchend',    off, {passive: false});
 }
 
 bindHold(document.getElementById('btn-left'),    'KeyA');
@@ -125,14 +134,11 @@ bindTap(document.getElementById('nav-left'),  'ArrowLeft');
 bindTap(document.getElementById('nav-right'), 'ArrowRight');
 bindTap(document.getElementById('nav-ok'),    'Enter');
 
-// Prevent iOS double-tap zoom on the entire UI
-document.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, {passive: false});
-let _lastTap = 0;
-document.addEventListener('touchend', e => {
-  const now = Date.now();
-  if (now - _lastTap < 300) e.preventDefault();
-  _lastTap = now;
-}, {passive: false});
+// Prevent all default touch behavior (zoom, scroll, callout) for the game
+document.addEventListener('touchstart',  e => e.preventDefault(), {passive: false});
+document.addEventListener('touchmove',   e => e.preventDefault(), {passive: false});
+document.addEventListener('touchend',    e => e.preventDefault(), {passive: false});
+document.addEventListener('touchcancel', e => e.preventDefault(), {passive: false});
 
 // Canvas tap handler for charselect & intro
 canvas.addEventListener('pointerdown', e => {
