@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>まるばつゲーム</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 { font-size: 2rem; margin-bottom: 10px; color: #333; }
+    .mode {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .mode button {
+      padding: 8px 16px;
+      font-size: 0.9rem;
+      background: #f0f0f0;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mode button.active {
+      background: #667eea;
+      color: white;
+      border-color: #4f5fcf;
+    }
+    .score {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+      font-size: 1.1rem;
+      color: #555;
+    }
+    .score span { font-weight: bold; font-size: 1.5rem; color: #667eea; }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 25px auto;
+      width: 320px;
+      height: 320px;
+    }
+    .cell {
+      background: #f0f0f0;
+      border: 3px solid transparent;
+      border-radius: 16px;
+      font-size: 4rem;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .cell:hover:not(.taken) {
+      background: #e0e0ff;
+      border-color: #667eea;
+      transform: scale(1.05);
+    }
+    .cell.taken { cursor: not-allowed; }
+    .cell.x { color: #ef4444; }
+    .cell.o { color: #3b82f6; }
+    .cell.win {
+      background: #fef08a;
+      animation: pulse 0.6s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.08); }
+    }
+    .result {
+      font-size: 1.6rem;
+      font-weight: bold;
+      margin: 15px 0;
+      min-height: 2rem;
+      color: #333;
+    }
+    .result.win { color: #22c55e; }
+    .result.lose { color: #ef4444; }
+    .result.draw { color: #f59e0b; }
+    .reset {
+      margin-top: 10px;
+      padding: 10px 30px;
+      font-size: 1rem;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .reset:hover { background: #4f5fcf; }
+    .reset.secondary {
+      background: #aaa;
+      margin-left: 8px;
+    }
+    .reset.secondary:hover { background: #888; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⭕ まるばつゲーム ❌</h1>
+
+    <div class="mode">
+      <button id="modePvP" class="active" onclick="setMode('pvp')">2人対戦</button>
+      <button id="modeCPU" onclick="setMode('cpu')">CPU対戦</button>
+    </div>
+
+    <div class="score">
+      <div>⭕<br><span id="oScore">0</span></div>
+      <div>引き分け<br><span id="drawScore">0</span></div>
+      <div>❌<br><span id="xScore">0</span></div>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="result" id="result">⭕ の番です</div>
+
+    <button class="reset" onclick="newGame()">次のゲーム</button>
+    <button class="reset secondary" onclick="resetAll()">スコアリセット</button>
+  </div>
+
+  <script>
+    const board = document.getElementById('board');
+    const resultEl = document.getElementById('result');
+    let cells = Array(9).fill('');
+    let current = 'O';
+    let gameOver = false;
+    let mode = 'pvp';
+    let scores = { O: 0, X: 0, draw: 0 };
+
+    const lines = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+
+    function render() {
+      board.innerHTML = '';
+      cells.forEach((v, i) => {
+        const c = document.createElement('div');
+        c.className = 'cell' + (v ? ' taken ' + v.toLowerCase() : '');
+        c.textContent = v === 'O' ? '⭕' : v === 'X' ? '❌' : '';
+        c.onclick = () => handleClick(i);
+        board.appendChild(c);
+      });
+    }
+
+    function handleClick(i) {
+      if (gameOver || cells[i]) return;
+      if (mode === 'cpu' && current === 'X') return;
+      placeMark(i, current);
+      if (gameOver) return;
+      switchTurn();
+      if (mode === 'cpu' && current === 'X' && !gameOver) {
+        setTimeout(cpuMove, 400);
+      }
+    }
+
+    function placeMark(i, mark) {
+      cells[i] = mark;
+      render();
+      const winLine = checkWin(mark);
+      if (winLine) {
+        gameOver = true;
+        highlight(winLine);
+        scores[mark]++;
+        updateScore();
+        const symbol = mark === 'O' ? '⭕' : '❌';
+        if (mode === 'cpu') {
+          if (mark === 'O') {
+            resultEl.textContent = 'あなたの勝ち！ 🎉';
+            resultEl.className = 'result win';
+          } else {
+            resultEl.textContent = 'CPUの勝ち！ 😢';
+            resultEl.className = 'result lose';
+          }
+        } else {
+          resultEl.textContent = symbol + ' の勝ち！ 🎉';
+          resultEl.className = 'result win';
+        }
+        return;
+      }
+      if (cells.every(v => v)) {
+        gameOver = true;
+        scores.draw++;
+        updateScore();
+        resultEl.textContent = '引き分け！';
+        resultEl.className = 'result draw';
+      }
+    }
+
+    function switchTurn() {
+      current = current === 'O' ? 'X' : 'O';
+      const symbol = current === 'O' ? '⭕' : '❌';
+      if (mode === 'cpu' && current === 'X') {
+        resultEl.textContent = 'CPUの番です...';
+      } else {
+        resultEl.textContent = symbol + ' の番です';
+      }
+      resultEl.className = 'result';
+    }
+
+    function checkWin(mark) {
+      for (const line of lines) {
+        if (line.every(i => cells[i] === mark)) return line;
+      }
+      return null;
+    }
+
+    function highlight(line) {
+      const els = board.children;
+      line.forEach(i => els[i].classList.add('win'));
+    }
+
+    function cpuMove() {
+      const i = bestMove();
+      if (i == null) return;
+      placeMark(i, 'X');
+      if (!gameOver) switchTurn();
+    }
+
+    function bestMove() {
+      for (const line of lines) {
+        const move = findCriticalMove(line, 'X');
+        if (move !== null) return move;
+      }
+      for (const line of lines) {
+        const move = findCriticalMove(line, 'O');
+        if (move !== null) return move;
+      }
+      if (cells[4] === '') return 4;
+      const corners = [0,2,6,8].filter(i => cells[i] === '');
+      if (corners.length) return corners[Math.floor(Math.random()*corners.length)];
+      const empty = cells.map((v,i) => v ? -1 : i).filter(i => i >= 0);
+      return empty.length ? empty[Math.floor(Math.random()*empty.length)] : null;
+    }
+
+    function findCriticalMove(line, mark) {
+      const marks = line.map(i => cells[i]);
+      if (marks.filter(v => v === mark).length === 2 && marks.includes('')) {
+        return line[marks.indexOf('')];
+      }
+      return null;
+    }
+
+    function updateScore() {
+      document.getElementById('oScore').textContent = scores.O;
+      document.getElementById('xScore').textContent = scores.X;
+      document.getElementById('drawScore').textContent = scores.draw;
+    }
+
+    function newGame() {
+      cells = Array(9).fill('');
+      current = 'O';
+      gameOver = false;
+      resultEl.textContent = '⭕ の番です';
+      resultEl.className = 'result';
+      render();
+    }
+
+    function resetAll() {
+      scores = { O: 0, X: 0, draw: 0 };
+      updateScore();
+      newGame();
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('modePvP').classList.toggle('active', m === 'pvp');
+      document.getElementById('modeCPU').classList.toggle('active', m === 'cpu');
+      resetAll();
+    }
+
+    render();
+  </script>
+</body>
+</html>
